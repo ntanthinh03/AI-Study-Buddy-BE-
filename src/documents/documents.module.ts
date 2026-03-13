@@ -1,13 +1,18 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { DocumentsService } from './documents.service';
 import { DocumentsController } from './documents.controller';
+import { DocumentsService } from './documents.service';
 import { Document } from './entities/document.entity';
-import { AIService } from './ai.service'; // Thêm dòng này
+import { AIService } from './ai.service';
+import { ProgressModule } from '../progress/progress.module'; // ✅ 1. Import the ProgressModule
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Document])],
+  imports: [
+    TypeOrmModule.forFeature([Document]), // Already there
+    ProgressModule, // ✅ 2. Add ProgressModule here to resolve dependencies
+  ],
   controllers: [DocumentsController],
-  providers: [DocumentsService, AIService], // Thêm AIService vào đây
+  providers: [DocumentsService, AIService],
+  exports: [DocumentsService, AIService],
 })
 export class DocumentsModule {}

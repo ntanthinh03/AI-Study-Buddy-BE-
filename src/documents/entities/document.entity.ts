@@ -9,13 +9,13 @@ export class Document {
   @Column({ name: 'user_id', nullable: true }) // Tạm thời để null được để test
   userId: string;
 
-  @Column({ name: 'file_url' })
+  @Column({ nullable: true }) // Thêm nullable: true ở đây
   fileUrl: string;
 
   @Column({ name: 'file_name' })
   fileName: string;
 
-  @Column({ name: 'file_size' })
+  @Column({ name: 'file_size', nullable: true }) // ✅ Thêm nullable: true
   fileSize: number;
 
   @Column({ name: 'content_text', type: 'text', nullable: true })
