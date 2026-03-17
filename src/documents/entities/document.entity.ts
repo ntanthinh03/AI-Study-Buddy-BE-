@@ -1,32 +1,35 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
-// import { User } from '../../users/entities/user.entity'; // (Bỏ comment khi bạn đã tạo User Entity)
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { User } from '../../users/entities/user.entity'; // Đảm bảo đúng đường dẫn
 
-@Entity('documents') // Tên bảng trong DB
+@Entity('documents')
 export class Document {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'user_id', nullable: true }) // Tạm thời để null được để test
-  userId: string;
-
-  @Column({ nullable: true }) // Thêm nullable: true ở đây
-  fileUrl: string;
-
   @Column({ name: 'file_name' })
   fileName: string;
 
-  @Column({ name: 'file_size', nullable: true }) // ✅ Thêm nullable: true
+  @Column({ name: 'file_size' })
   fileSize: number;
+
+  // ✅ 1. THÊM CỘT NÀY: Để lưu đường dẫn file vật lý và xóa file
+  @Column({ name: 'file_path', nullable: true })
+  filePath: string;
 
   @Column({ name: 'content_text', type: 'text', nullable: true })
   contentText: string;
 
-  @Column({ default: 'PENDING' })
-  status: string; // PENDING, PROCESSING, COMPLETED, FAILED
-
   @Column({ type: 'text', nullable: true })
   summary: string;
 
+  @Column({ default: 'PROCESSING' })
+  status: string;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
+
+  // ✅ 2. THÊM QUAN HỆ NÀY: Để dùng được where: { user: { id: userId } }
+  @ManyToOne(() => User, (user) => user.documents, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'user_id' })
+  user: User;
 }

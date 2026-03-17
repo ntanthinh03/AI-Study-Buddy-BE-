@@ -1,132 +1,154 @@
-
+import { 
+  Injectable, 
+  NotFoundException, 
+  Logger 
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Document } from './entities/document.entity';
+import { ChatMessage } from './entities/chat-message.entity';
 import { AIService } from './ai.service';
-import { ProgressService } from '../progress/progress.service'; // Integrated Progress tracking
+import { ProgressService } from '../progress/progress.service';
 import * as fs from 'fs';
-import { Injectable } from '@nestjs/common';
 import PDFParser from 'pdf2json';
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-
 
 @Injectable()
 export class DocumentsService {
+  private readonly logger = new Logger(DocumentsService.name);
+
   constructor(
     @InjectRepository(Document)
     private documentsRepository: Repository<Document>,
+    
+    @InjectRepository(ChatMessage)
+    private chatRepository: Repository<ChatMessage>,
+    
     private aiService: AIService,
-    private progressService: ProgressService, // Injected for Notion-like progress
+    private progressService: ProgressService,
   ) {}
 
   /**
-   * Handles document upload and initializes the learning progress.
-   *
+   * 1. Xử lý Upload: Lưu DB gắn với Account và kích hoạt AI xử lý ngầm
    */
   async create(file: Express.Multer.File, userId: string) {
-  // 1. Lưu bản ghi ban đầu
-  const doc = await this.documentsRepository.save({
-    fileName: file.originalname,
-    fileSize: file.size,
-    userId: userId,
-    status: 'PROCESSING'
-  });
+    // Lưu bản ghi vào DB với quan hệ User
+    const doc = await this.documentsRepository.save({
+      fileName: file.originalname,
+      fileSize: file.size,
+      filePath: file.path, 
+      user: { id: userId }, 
+      status: 'PROCESSING',
+    });
 
-  // 2. Chạy ngầm việc tóm tắt. Dùng file.buffer hoặc file.path tùy cấu hình
-  const input = file.path || file.buffer; 
-  this.extractAndSummarize(doc, input); 
+    // Chạy ngầm việc trích xuất và tóm tắt (Background Task)
+    const input = file.path || file.buffer;
+    this.extractAndSummarize(doc, input);
 
-  return doc;
-}
+    return doc;
+  }
 
   /**
-   * Extracts text from PDF and generates an AI summary via Gemini.
-   *
+   * 2. Trích xuất Text & Gemini tóm tắt (Hỗ trợ RTX 5080 xử lý cực nhanh)
    */
-  async extractAndSummarize(document: any, input: string | Buffer) {
-  const pdfParser = new PDFParser(null, true); // Mode 1: Lấy raw text
+  async extractAndSummarize(document: Document, input: string | Buffer) {
+    const pdfParser = new PDFParser(null, true);
 
-  try {
-    // 1. Bọc PDFParser vào Promise để dùng await thực thụ
-    const extractedText = await new Promise<string>((resolve, reject) => {
-      pdfParser.on('pdfParser_dataError', (errData: any) => {
-        console.error('❌ Lỗi đọc PDF:', errData.parserError);
-        reject(new Error('Không thể trích xuất văn bản từ PDF'));
+    try {
+      const extractedText = await new Promise<string>((resolve, reject) => {
+        pdfParser.on('pdfParser_dataError', (errData: any) => reject(new Error(errData.parserError)));
+        pdfParser.on('pdfParser_dataReady', () => resolve(pdfParser.getRawTextContent()));
+
+        if (Buffer.isBuffer(input)) {
+          pdfParser.parseBuffer(input);
+        } else {
+          pdfParser.loadPDF(input);
+        }
       });
 
-      pdfParser.on('pdfParser_dataReady', () => {
-        const text = pdfParser.getRawTextContent();
-        resolve(text);
-      });
-
-      // Kiểm tra đầu vào để chọn đúng hàm load
-      if (Buffer.isBuffer(input)) {
-        pdfParser.parseBuffer(input);
-      } else {
-        pdfParser.loadPDF(input);
+      if (!extractedText || extractedText.trim().length === 0) {
+        throw new Error('PDF không có nội dung văn bản');
       }
-    });
 
-    if (!extractedText || extractedText.trim().length === 0) {
-      throw new Error('PDF không có nội dung văn bản (có thể là file ảnh scan)');
+      const cleanText = extractedText.substring(0, 15000);
+
+      // Cập nhật text đã trích xuất
+      await this.documentsRepository.update(document.id, {
+        contentText: cleanText,
+        status: 'SUMMARIZING',
+      });
+
+      // Gọi AI tóm tắt
+      const summary = await this.aiService.generateSummary(cleanText);
+
+      await this.documentsRepository.update(document.id, {
+        summary: summary,
+        status: 'COMPLETED',
+      });
+
+      this.logger.log(`✅ Thành công: ${document.fileName} đã xử lý xong.`);
+    } catch (error) {
+      this.logger.error(`❌ Lỗi xử lý ${document.id}: ${error.message}`);
+      await this.documentsRepository.update(document.id, { status: 'FAILED' });
+    }
+  }
+
+  /**
+   * 3. Lịch sử Chat: Lưu tin nhắn mới (Gắn ID để tạo Tab riêng)
+   */
+  async saveMessage(userId: string, docId: string, question: string, answer: string) {
+    return await this.chatRepository.save({
+      question,
+      answer,
+      user: { id: userId },
+      document: { id: docId }
+    });
+  }
+
+  /**
+   * 4. Lịch sử Chat: Lấy tin nhắn theo từng Tab tài liệu
+   */
+  async getChatHistory(docId: string, userId: string) {
+    return await this.chatRepository.find({
+      where: { 
+        document: { id: docId },
+        user: { id: userId }
+      },
+      order: { createdAt: 'ASC' }
+    });
+  }
+
+  /**
+   * 5. Quản lý Tài liệu: Lấy danh sách PDF của riêng Account
+   */
+  async findAllByUser(userId: string) {
+    return await this.documentsRepository.find({
+      where: { user: { id: userId } },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  /**
+   * 6. Quản lý Tài liệu: Tìm 1 cái (Quan trọng để check Auth)
+   */
+  async findOne(id: string, userId: string) {
+    const doc = await this.documentsRepository.findOne({
+      where: { id: id, user: { id: userId } },
+    });
+    if (!doc) throw new NotFoundException('Không tìm thấy tài liệu này!');
+    return doc;
+  }
+
+  /**
+   * 7. Quản lý Tài liệu: Xóa sạch (File + DB)
+   */
+  async remove(id: string, userId: string) {
+    const doc = await this.findOne(id, userId);
+
+    if (doc.filePath && fs.existsSync(doc.filePath)) {
+      try { fs.unlinkSync(doc.filePath); } catch (err) {}
     }
 
-    // 2. Cập nhật nội dung thô và trạng thái trung gian
-    // Giới hạn 15k ký tự để Gemini xử lý nhanh nhất trên máy RTX 5080 của bạn
-    const cleanText = extractedText.substring(0, 15000); 
-    
-    await this.documentsRepository.update(document.id, {
-      contentText: cleanText,
-      status: 'SUMMARIZING' // Trạng thái để bạn check real-time
-    });
-    console.log(`--- 📄 Đã trích xuất xong. Đang gửi sang Gemini... ---`);
-
-    // 3. Gọi AI tóm tắt
-    const summary = await this.aiService.generateSummary(cleanText);
-
-    // 4. Hoàn tất
-    await this.documentsRepository.update(document.id, {
-      summary: summary,
-      status: 'COMPLETED'
-    });
-    
-    console.log(`✅ Thành công: ${document.fileName} đã sẵn sàng!`);
-
-  } catch (error) {
-    console.error('❌ Lỗi xử lý:', error.message);
-    // Đảm bảo cập nhật FAILED để người dùng không phải đợi vô tận
-    await this.documentsRepository.update(document.id, {
-      status: 'FAILED'
-    });
+    await this.documentsRepository.delete(id);
+    return { message: 'Đã xóa tài liệu và các dữ liệu liên quan.' };
   }
-}
-
-  findAll() {
-    return this.documentsRepository.find({ order: { createdAt: 'DESC' } });
-  }
-
-  async findOne(id: string) {
-    return await this.documentsRepository.findOneBy({ id });
-  }
-  async processAI(documentId: string, text: string) {
-  console.log(`[${new Date().toLocaleTimeString()}] 🚀 Bắt đầu xử lý Document ID: ${documentId}`);
-  
-  try {
-    console.log(`[${new Date().toLocaleTimeString()}] 📄 Đang trích xuất text (${text.length} ký tự)...`);
-    
-    // Giả sử bước này gọi Gemini
-    console.log(`[${new Date().toLocaleTimeString()}] 🤖 Đang gửi dữ liệu sang Gemini API...`);
-    const summary = await this.aiService.generateSummary(text); //
-    
-    console.log(`[${new Date().toLocaleTimeString()}] ✅ Gemini đã phản hồi thành công!`);
-
-    await this.documentsRepository.update(documentId, {
-      summary,
-      status: 'COMPLETED',
-    });
-  } catch (error) {
-    console.error(`[${new Date().toLocaleTimeString()}] ❌ Lỗi tại bước AI:`, error.message);
-    await this.documentsRepository.update(documentId, { status: 'FAILED' });
-  }
-}
 }
