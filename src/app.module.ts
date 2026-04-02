@@ -10,13 +10,14 @@ import { AuthModule } from './auth/auth.module';
 import { DocumentsModule } from './documents/documents.module';
 import { QuizzesModule } from './quizzes/quizzes.module';
 import { ProgressModule } from './progress/progress.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
     // 1. Cấu hình biến môi trường (.env)
     ConfigModule.forRoot({
       isGlobal: true, 
-      envFilePath: '.env', // Đảm bảo đúng tên file bạn đã tạo
+      envFilePath: '.env',
     }),
 
     // 2. Cấu hình Database (PostgreSQL)
@@ -35,16 +36,16 @@ import { ProgressModule } from './progress/progress.module';
         
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
         autoLoadEntities: true,
-        synchronize: false, 
+        synchronize: true, 
       }),
     }),
 
-    // 3. Đăng ký toàn bộ Module tính năng
-    UsersModule,    // Quản lý thông tin user
-    AuthModule,     // Xử lý Login/Register
-    DocumentsModule, // Xử lý PDF & Gemini
-    QuizzesModule,   // Tạo bài tập AI
-    ProgressModule,  // Theo dõi lộ trình học tập
+    ChatModule,
+    UsersModule,    
+    AuthModule,     
+    DocumentsModule, 
+    QuizzesModule,   
+    ProgressModule, ChatModule, 
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -29,7 +29,7 @@ export class User {
   @Column({ default: 'local' })
   provider: string;
 
-  @Column({ name: 'google_id', nullable: true, unique: true })
+  @Column({ name: 'googleId', nullable: true })
   googleId: string;
 
   // ✅ Quan hệ 1-N: Một User có nhiều tài liệu PDF
@@ -45,4 +45,5 @@ export class User {
 
   @UpdateDateColumn({ name: 'updated_at' }) // Nên dùng updated_at cho đồng bộ với created_at
   updatedAt: Date;
+  
 }
