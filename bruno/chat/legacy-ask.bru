@@ -1,0 +1,21 @@
+meta {
+  name: Legacy Chat Ask
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/chat/ask
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "message": "Hello"
+  }
+}

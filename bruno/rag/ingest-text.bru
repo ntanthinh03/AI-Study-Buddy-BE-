@@ -1,0 +1,22 @@
+meta {
+  name: RAG Ingest Text
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/rag/ingest-text
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "text": "Noi dung can nap vao tri thuc",
+    "source": "lecture-note-week-1"
+  }
+}

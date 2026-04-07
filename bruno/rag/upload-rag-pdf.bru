@@ -1,0 +1,15 @@
+meta {
+  name: RAG Upload PDF
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/rag/upload
+  body: multipartForm
+  auth: none
+}
+
+body:multipart-form {
+  file: @/absolute/path/to/file.pdf
+}

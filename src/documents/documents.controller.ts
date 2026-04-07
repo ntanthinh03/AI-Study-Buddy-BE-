@@ -1,12 +1,13 @@
 import { 
   Controller, Post, UploadedFile, UseInterceptors, 
   Get, UseGuards, Request, Delete, Param, 
-  Body
+  Body, BadRequestException
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '@nestjs/passport';
 import { DocumentsService } from './documents.service';
 import { AIService } from './ai.service';
+import type { UploadedFile as UploadedPdfFile } from '../common/types/uploaded-file.type';
 
 @Controller('documents')
 @UseGuards(AuthGuard('jwt')) // 🔒 Đã khóa cửa toàn bộ, không cần thêm Guard lẻ ở dưới
@@ -20,7 +21,7 @@ export class DocumentsController {
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
   async uploadFile(
-    @UploadedFile() file: Express.Multer.File, 
+    @UploadedFile() file: UploadedPdfFile,
     @Request() req 
   ) {
     const userId = req.user.userId; 
@@ -55,6 +56,10 @@ export class DocumentsController {
     
     // 1. Lấy tài liệu và kiểm tra quyền sở hữu
     const doc = await this.documentsService.findOne(id, userId);
+
+    if (!doc.contentText || doc.contentText.trim().length === 0) {
+      throw new BadRequestException('Tai lieu chua san sang de chat. Vui long doi xu ly xong.');
+    }
 
     // 2. Gọi Gemini trả lời
     const answer = await this.aiService.chatWithDocument(doc.contentText, question);

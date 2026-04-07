@@ -11,6 +11,7 @@ import { AIService } from './ai.service';
 import { ProgressService } from '../progress/progress.service';
 import * as fs from 'fs';
 import PDFParser from 'pdf2json';
+import { UploadedFile } from '../common/types/uploaded-file.type';
 
 @Injectable()
 export class DocumentsService {
@@ -30,7 +31,7 @@ export class DocumentsService {
   /**
    * 1. Xử lý Upload: Lưu DB gắn với Account và kích hoạt AI xử lý ngầm
    */
-  async create(file: Express.Multer.File, userId: string) {
+  async create(file: UploadedFile, userId: string) {
     // Lưu bản ghi vào DB với quan hệ User
     const doc = await this.documentsRepository.save({
       fileName: file.originalname,
@@ -86,8 +87,9 @@ export class DocumentsService {
       });
 
       this.logger.log(`✅ Thành công: ${document.fileName} đã xử lý xong.`);
-    } catch (error) {
-      this.logger.error(`❌ Lỗi xử lý ${document.id}: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`❌ Lỗi xử lý ${document.id}: ${message}`);
       await this.documentsRepository.update(document.id, { status: 'FAILED' });
     }
   }

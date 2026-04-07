@@ -1,0 +1,26 @@
+meta {
+  name: Complete Module
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/progress/complete
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "documentId": "{{documentId}}",
+    "score": 8.5
+  }
+}

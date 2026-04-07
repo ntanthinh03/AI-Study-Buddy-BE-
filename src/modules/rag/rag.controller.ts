@@ -1,6 +1,7 @@
 import { Controller, Post, UploadedFile, UseInterceptors, Body } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { RagService } from './rag.service';
+import type { UploadedFile as UploadedPdfFile } from '../../common/types/uploaded-file.type';
 
 @Controller('rag')
 export class RagController {
@@ -8,7 +9,7 @@ export class RagController {
 
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
-  async uploadFile(@UploadedFile() file: Express.Multer.File) {
+  async uploadFile(@UploadedFile() file: UploadedPdfFile) {
     if (!file) return { error: "No file uploaded" };
     return await this.ragService.processPdf(file.buffer, file.originalname);
   }

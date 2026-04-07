@@ -5,22 +5,22 @@ import { Document } from './document.entity';
 @Entity('chat_messages')
 export class ChatMessage {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column({ type: 'text' })
-  question: string;
+  question!: string;
 
   @Column({ type: 'text' })
-  answer: string;
+  answer!: string;
 
   @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  createdAt!: Date;
 
   @ManyToOne(() => User)
   @JoinColumn({ name: 'user_id' })
-  user: User;
+  user!: User;
 
   @ManyToOne(() => Document)
   @JoinColumn({ name: 'document_id' })
-  document: Document;
+  document!: Document;
 }

@@ -1,0 +1,21 @@
+meta {
+  name: AI Ask
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/ai/ask
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "question": "Overfitting la gi?"
+  }
+}

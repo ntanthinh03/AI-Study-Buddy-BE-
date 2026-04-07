@@ -1,0 +1,15 @@
+meta {
+  name: List Quizzes
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/quizzes
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}

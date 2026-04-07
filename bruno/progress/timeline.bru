@@ -1,0 +1,15 @@
+meta {
+  name: Progress Timeline
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/progress/timeline
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}

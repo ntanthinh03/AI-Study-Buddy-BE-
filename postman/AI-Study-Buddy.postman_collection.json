@@ -1,0 +1,303 @@
+{
+  "info": {
+    "name": "AI Study Buddy API",
+    "_postman_id": "9e0f8a18-4f7a-4d42-9a8c-0a85df3cdb11",
+    "description": "Collection generated from current NestJS endpoints (standardized progress with JWT).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3001" },
+    { "key": "token", "value": "" },
+    { "key": "documentId", "value": "" },
+    { "key": "email", "value": "student@example.com" },
+    { "key": "password", "value": "123456" },
+    { "key": "fullName", "value": "Nguyen Van A" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "POST /auth/register",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"fullName\": \"{{fullName}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/register"
+          }
+        },
+        {
+          "name": "POST /auth/login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.access_token) {",
+                  "  pm.collectionVariables.set('token', json.access_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Documents",
+      "item": [
+        {
+          "name": "POST /documents/upload",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/documents/upload"
+          }
+        },
+        {
+          "name": "GET /documents",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/documents"
+          }
+        },
+        {
+          "name": "POST /documents/:id/chat",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"Tom tat chuong 1 giup toi\"\n}"
+            },
+            "url": "{{baseUrl}}/documents/{{documentId}}/chat"
+          }
+        },
+        {
+          "name": "GET /documents/:id/history",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/documents/{{documentId}}/history"
+          }
+        },
+        {
+          "name": "DELETE /documents/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/documents/{{documentId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Quizzes",
+      "item": [
+        {
+          "name": "POST /quizzes/generate/:documentId",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/quizzes/generate/{{documentId}}"
+          }
+        },
+        {
+          "name": "GET /quizzes",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/quizzes"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Progress",
+      "item": [
+        {
+          "name": "GET /progress/me",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/progress/me"
+          }
+        },
+        {
+          "name": "GET /progress/timeline",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "{{baseUrl}}/progress/timeline"
+          }
+        },
+        {
+          "name": "POST /progress/init",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentId\": \"{{documentId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/progress/init"
+          }
+        },
+        {
+          "name": "POST /progress/complete",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentId\": \"{{documentId}}\",\n  \"score\": 8.5\n}"
+            },
+            "url": "{{baseUrl}}/progress/complete"
+          }
+        }
+      ]
+    },
+    {
+      "name": "RAG",
+      "item": [
+        {
+          "name": "POST /rag/upload",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/rag/upload"
+          }
+        },
+        {
+          "name": "POST /rag/ingest-text",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Noi dung can nap vao tri thuc\",\n  \"source\": \"lecture-note-week-1\"\n}"
+            },
+            "url": "{{baseUrl}}/rag/ingest-text"
+          }
+        }
+      ]
+    },
+    {
+      "name": "AI",
+      "item": [
+        {
+          "name": "POST /ai/ask",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"Overfitting la gi?\"\n}"
+            },
+            "url": "{{baseUrl}}/ai/ask"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chat (Legacy)",
+      "item": [
+        {
+          "name": "POST /chat/ask",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Hello\"\n}"
+            },
+            "url": "{{baseUrl}}/chat/ask"
+          }
+        }
+      ]
+    }
+  ]
+}

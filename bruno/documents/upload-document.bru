@@ -1,0 +1,19 @@
+meta {
+  name: Upload Document
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/documents/upload
+  body: multipartForm
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:multipart-form {
+  file: @/absolute/path/to/file.pdf
+}
