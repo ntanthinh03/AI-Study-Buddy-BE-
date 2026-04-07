@@ -1,7 +1,7 @@
-import { 
-  Injectable, 
-  NotFoundException, 
-  Logger 
+import {
+  Injectable,
+  NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -20,37 +20,53 @@ export class DocumentsService {
   constructor(
     @InjectRepository(Document)
     private documentsRepository: Repository<Document>,
-    
+
     @InjectRepository(ChatMessage)
     private chatRepository: Repository<ChatMessage>,
-    
+
     private aiService: AIService,
     private progressService: ProgressService,
   ) {}
 
-  /**
-   * 1. Xử lý Upload: Lưu DB gắn với Account và kích hoạt AI xử lý ngầm
-   */
   async create(file: UploadedFile, userId: string) {
-    // Lưu bản ghi vào DB với quan hệ User
     const doc = await this.documentsRepository.save({
       fileName: file.originalname,
       fileSize: file.size,
-      filePath: file.path, 
-      user: { id: userId }, 
+      filePath: file.path,
+      user: { id: userId },
       status: 'PROCESSING',
     });
 
-    // Chạy ngầm việc trích xuất và tóm tắt (Background Task)
     const input = file.path || file.buffer;
-    this.extractAndSummarize(doc, input);
+    const mimeType = file.mimetype || this.inferMimeType(file.originalname);
+    void this.processUploadedFile(doc, input, mimeType);
 
     return doc;
   }
 
-  /**
-   * 2. Trích xuất Text & Gemini tóm tắt (Hỗ trợ RTX 5080 xử lý cực nhanh)
-   */
+  private inferMimeType(fileName: string): string {
+    const extension = fileName.split('.').pop()?.toLowerCase();
+
+    if (extension === 'png') return 'image/png';
+    if (extension === 'jpg' || extension === 'jpeg') return 'image/jpeg';
+    if (extension === 'webp') return 'image/webp';
+    return 'application/pdf';
+  }
+
+  private isImageMimeType(mimeType: string): boolean {
+    return mimeType.startsWith('image/');
+  }
+
+  private async processUploadedFile(document: Document, input: string | Buffer, mimeType: string) {
+    if (this.isImageMimeType(mimeType)) {
+      const imageBuffer = Buffer.isBuffer(input) ? input : fs.readFileSync(input);
+      await this.processImageAndSummarize(document, imageBuffer, mimeType);
+      return;
+    }
+
+    await this.extractAndSummarize(document, input);
+  }
+
   async extractAndSummarize(document: Document, input: string | Buffer) {
     const pdfParser = new PDFParser(null, true);
 
@@ -67,61 +83,71 @@ export class DocumentsService {
       });
 
       if (!extractedText || extractedText.trim().length === 0) {
-        throw new Error('PDF không có nội dung văn bản');
+        throw new Error('PDF does not contain extractable text');
       }
 
       const cleanText = extractedText.substring(0, 15000);
-
-      // Cập nhật text đã trích xuất
       await this.documentsRepository.update(document.id, {
         contentText: cleanText,
         status: 'SUMMARIZING',
       });
 
-      // Gọi AI tóm tắt
       const summary = await this.aiService.generateSummary(cleanText);
 
       await this.documentsRepository.update(document.id, {
-        summary: summary,
+        summary,
         status: 'COMPLETED',
       });
 
-      this.logger.log(`✅ Thành công: ${document.fileName} đã xử lý xong.`);
+      this.logger.log(`✅ Success: ${document.fileName} processed successfully.`);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`❌ Lỗi xử lý ${document.id}: ${message}`);
+      this.logger.error(`❌ Failed to process PDF ${document.id}: ${message}`);
       await this.documentsRepository.update(document.id, { status: 'FAILED' });
     }
   }
 
-  /**
-   * 3. Lịch sử Chat: Lưu tin nhắn mới (Gắn ID để tạo Tab riêng)
-   */
+  async processImageAndSummarize(document: Document, imageBuffer: Buffer, mimeType: string) {
+    try {
+      await this.documentsRepository.update(document.id, {
+        status: 'SUMMARIZING',
+      });
+
+      const { extractedText, summary } = await this.aiService.analyzeImageAndSummarize(imageBuffer, mimeType);
+
+      await this.documentsRepository.update(document.id, {
+        contentText: extractedText,
+        summary,
+        status: 'COMPLETED',
+      });
+
+      this.logger.log(`✅ Success: image ${document.fileName} processed successfully.`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`❌ Failed to process image ${document.id}: ${message}`);
+      await this.documentsRepository.update(document.id, { status: 'FAILED' });
+    }
+  }
+
   async saveMessage(userId: string, docId: string, question: string, answer: string) {
     return await this.chatRepository.save({
       question,
       answer,
       user: { id: userId },
-      document: { id: docId }
+      document: { id: docId },
     });
   }
 
-  /**
-   * 4. Lịch sử Chat: Lấy tin nhắn theo từng Tab tài liệu
-   */
   async getChatHistory(docId: string, userId: string) {
     return await this.chatRepository.find({
-      where: { 
+      where: {
         document: { id: docId },
-        user: { id: userId }
+        user: { id: userId },
       },
-      order: { createdAt: 'ASC' }
+      order: { createdAt: 'ASC' },
     });
   }
 
-  /**
-   * 5. Quản lý Tài liệu: Lấy danh sách PDF của riêng Account
-   */
   async findAllByUser(userId: string) {
     return await this.documentsRepository.find({
       where: { user: { id: userId } },
@@ -129,28 +155,26 @@ export class DocumentsService {
     });
   }
 
-  /**
-   * 6. Quản lý Tài liệu: Tìm 1 cái (Quan trọng để check Auth)
-   */
   async findOne(id: string, userId: string) {
     const doc = await this.documentsRepository.findOne({
-      where: { id: id, user: { id: userId } },
+      where: { id, user: { id: userId } },
     });
-    if (!doc) throw new NotFoundException('Không tìm thấy tài liệu này!');
+    if (!doc) throw new NotFoundException('Document not found');
     return doc;
   }
 
-  /**
-   * 7. Quản lý Tài liệu: Xóa sạch (File + DB)
-   */
   async remove(id: string, userId: string) {
     const doc = await this.findOne(id, userId);
 
     if (doc.filePath && fs.existsSync(doc.filePath)) {
-      try { fs.unlinkSync(doc.filePath); } catch (err) {}
+      try {
+        fs.unlinkSync(doc.filePath);
+      } catch {
+        // Ignore filesystem cleanup issues.
+      }
     }
 
     await this.documentsRepository.delete(id);
-    return { message: 'Đã xóa tài liệu và các dữ liệu liên quan.' };
+    return { message: 'Document and related data deleted successfully.' };
   }
 }

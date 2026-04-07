@@ -61,7 +61,7 @@ export class DocumentsController {
       throw new BadRequestException('Tai lieu chua san sang de chat. Vui long doi xu ly xong.');
     }
 
-    // 2. Gọi Gemini trả lời
+    // 2. Gọi local AI trả lời
     const answer = await this.aiService.chatWithDocument(doc.contentText, question);
 
     // 3. ✅ Lưu vào DB để sau này mở Tab vẫn thấy tin nhắn cũ

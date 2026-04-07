@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 import { ConfigService } from '@nestjs/config';
 
 export interface QuizQuestion {
@@ -9,104 +8,188 @@ export interface QuizQuestion {
   explanation: string;
 }
 
+type OllamaChatMessage = {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+  images?: string[];
+};
+
+type OllamaChatResponse = {
+  message?: {
+    role?: string;
+    content?: string;
+  };
+  response?: string;
+  error?: string;
+};
+
 @Injectable()
 export class AIService {
   private readonly logger = new Logger(AIService.name);
-  private genAI: GoogleGenerativeAI;
-  private model: GenerativeModel;
+  private readonly baseUrl: string;
+  private readonly textModel: string;
+  private readonly visionModel: string;
 
-  constructor(private configService: ConfigService) {
-    const apiKey = this.configService.get<string>('GEMINI_API_KEY') ?? '';
-    this.genAI = new GoogleGenerativeAI(apiKey);
-    
-    // ✅ Đã cập nhật model ổn định nhất hiện tại cho đồ án
-    this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  constructor(private readonly configService: ConfigService) {
+    this.baseUrl = (this.configService.get<string>('OLLAMA_BASE_URL') ?? 'http://localhost:11434').replace(/\/$/, '');
+    this.textModel = this.configService.get<string>('OLLAMA_TEXT_MODEL') ?? 'qwen2.5:14b-instruct';
+    this.visionModel = this.configService.get<string>('OLLAMA_VISION_MODEL') ?? 'llama3.2-vision:11b';
   }
 
-  /**
-   * Tóm tắt nội dung văn bản bằng tiếng Việt
-   */
   async generateSummary(text: string): Promise<string> {
-    const prompt = `Bạn là một trợ lý học tập thông minh. Hãy tóm tắt nội dung sau đây một cách ngắn gọn, súc tích và dễ hiểu cho sinh viên bằng tiếng Việt.
-    Nội dung: ${text.substring(0, 15000)}`;
+    const prompt = `You are an intelligent study assistant. Summarize the following content clearly, accurately, and concisely for a student. Output strictly in English.\n\nContent:\n${text.substring(0, 15000)}`;
 
     try {
-      const result = await this.model.generateContent(prompt);
-      const response = await result.response;
-      const summary = response.text();
-
-      if (!summary || summary.trim().length === 0) {
-        throw new Error('Gemini trả về nội dung rỗng');
-      }
-
-      return summary;
-    } catch (error) {
-      this.logger.error(`❌ Lỗi Gemini Summary: ${error.message}`);
-      throw new Error(`Gemini Summary thất bại: ${error.message}`);
+      return await this.chat(this.textModel, [
+        { role: 'system', content: 'You are a precise academic assistant that always answers in English.' },
+        { role: 'user', content: prompt },
+      ]);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`❌ Local summary failed: ${message}`);
+      throw new Error(`Local summary failed: ${message}`);
     }
   }
 
-  /**
-   * Tạo 5 câu hỏi trắc nghiệm định dạng JSON
-   */
   async chatWithDocument(text: string, question: string): Promise<string> {
-  // Chúng ta giới hạn text tài liệu để tránh quá tải Token
-  const context = text.substring(0, 20000); 
-
-  const prompt = `Bạn là một trợ lý học tập thông minh tên là Buddy. 
-  Dựa trên nội dung tài liệu dưới đây, hãy trả lời câu hỏi của người dùng một cách chi tiết và dễ hiểu.
-  Nếu thông tin không có trong tài liệu, hãy nói rằng bạn không biết dựa trên tài liệu này nhưng có thể giải thích dựa trên kiến thức chung.
-
-  Nội dung tài liệu: ${context}
-  
-  Câu hỏi của người dùng: ${question}`;
-
-  try {
-    const result = await this.model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
-  } catch (error) {
-    this.logger.error(`❌ Lỗi Gemini Chat: ${error.message}`);
-    throw new Error('Không thể kết nối với Gemini để chat.');
-  }
-}
-  async generateQuiz(text: string): Promise<QuizQuestion[]> {
-    const prompt = `Dựa trên nội dung sau, hãy tạo 5 câu hỏi trắc nghiệm bằng tiếng Việt.
-
-YÊU CẦU QUAN TRỌNG: Chỉ trả về duy nhất mảng JSON, không có lời dẫn, không có dấu \`\`\`json.
-Định dạng bắt buộc:
-[
-  {
-    "question": "Câu hỏi là gì?",
-    "options": { "A": "Đáp án 1", "B": "Đáp án 2", "C": "Đáp án 3", "D": "Đáp án 4" },
-    "correctAnswer": "A",
-    "explanation": "Giải thích chi tiết tại sao A đúng"
-  }
-]
-
-Nội dung: \${text.substring(0, 15000)}`;
+    const context = text.substring(0, 20000);
+    const prompt = `Based on the document content below, answer the user's question clearly, accurately, and in English only. If the answer is not in the document, say you cannot find it in the document and then give a brief general explanation if helpful.\n\nDocument content:\n${context}\n\nUser question: ${question}`;
 
     try {
-      const result = await this.model.generateContent(prompt);
-      const response = await result.response;
-      let rawText = response.text();
+      return await this.chat(this.textModel, [
+        { role: 'system', content: 'You are Buddy, a concise study assistant. Always respond in English.' },
+        { role: 'user', content: prompt },
+      ]);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`❌ Local chat failed: ${message}`);
+      throw new Error('Could not connect to the local AI model for chat.');
+    }
+  }
 
-      // ✅ Mẹo: Dùng Regex để tìm đúng mảng JSON [ ... ] đề phòng Gemini trả về văn bản thừa
+  async analyzeImageAndSummarize(imageBuffer: Buffer, mimeType: string): Promise<{ extractedText: string; summary: string }> {
+    const imageBase64 = imageBuffer.toString('base64');
+    const prompt = `You are an OCR + study-note assistant for academic documents.
+
+Task:
+1) Read the image and extract study-relevant content as accurately as possible.
+2) Return ONLY valid JSON (no markdown, no code fences, no extra text).
+
+Output JSON schema (exactly these keys):
+{
+  "extractedText": "...",
+  "summary": "..."
+}
+
+Rules:
+- Output must be strictly in English.
+- Keep math formulas readable using plain text math notation.
+- Preserve key terms, headings, bullet points, and definitions when visible.
+- If text is partially unreadable, keep high-confidence text and avoid hallucination.
+- "extractedText" should be a clean OCR reconstruction (multi-line allowed).
+- "summary" should be concise, factual, and optimized for student review.
+- If image quality is low, say that briefly in summary but still provide best effort extraction.`;
+
+    try {
+      const rawText = await this.chat(this.visionModel, [
+        { role: 'system', content: 'You are a vision model for academic note processing. Always respond in English.' },
+        {
+          role: 'user',
+          content: prompt,
+          images: [imageBase64],
+        },
+      ]);
+
+      const parsed = this.extractJsonObject(rawText);
+      const extractedText = typeof parsed.extractedText === 'string' && parsed.extractedText.trim().length > 0
+        ? parsed.extractedText.trim()
+        : rawText.trim();
+      const summary = typeof parsed.summary === 'string' && parsed.summary.trim().length > 0
+        ? parsed.summary.trim()
+        : rawText.trim();
+
+      return { extractedText, summary };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`❌ Local image analysis failed: ${message}`);
+      throw new Error(`Local image analysis failed: ${message}`);
+    }
+  }
+
+  async generateQuiz(text: string): Promise<QuizQuestion[]> {
+    const prompt = `Based on the content below, generate 5 multiple-choice questions in English only.\n\nIMPORTANT: Return only a valid JSON array, without markdown, without code fences, and without extra text.\nFormat:\n[\n  {\n    "question": "What is ...?",\n    "options": { "A": "...", "B": "...", "C": "...", "D": "..." },\n    "correctAnswer": "A",\n    "explanation": "..."\n  }\n]\n\nContent:\n${text.substring(0, 15000)}`;
+
+    try {
+      const rawText = await this.chat(this.textModel, [
+        { role: 'system', content: 'You create precise study quizzes and always respond in English.' },
+        { role: 'user', content: prompt },
+      ]);
+
       const jsonMatch = rawText.match(/\[[\s\S]*\]/);
       if (!jsonMatch) {
-        throw new Error('Không tìm thấy định dạng JSON trong phản hồi của AI');
+        throw new Error('No JSON array found in AI response');
       }
 
       const questions: QuizQuestion[] = JSON.parse(jsonMatch[0]);
-
       if (!Array.isArray(questions) || questions.length === 0) {
-        throw new Error('Dữ liệu Quiz không phải là mảng hợp lệ');
+        throw new Error('Quiz output is not a valid array');
       }
 
       return questions;
-    } catch (error) {
-      this.logger.error(`❌ Lỗi Gemini Quiz: ${error.message}`);
-      throw new Error(`Gemini Quiz thất bại: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`❌ Local quiz generation failed: ${message}`);
+      throw new Error(`Local quiz generation failed: ${message}`);
+    }
+  }
+
+  private async chat(model: string, messages: OllamaChatMessage[]): Promise<string> {
+    const response = await fetch(`${this.baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        stream: false,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Ollama request failed (${response.status}): ${errorText}`);
+    }
+
+    const data = (await response.json()) as OllamaChatResponse;
+    const content = data.message?.content ?? data.response ?? '';
+
+    if (!content.trim()) {
+      throw new Error('Local model returned empty content');
+    }
+
+    return content;
+  }
+
+  private extractJsonObject(rawText: string): Record<string, unknown> {
+    const match = rawText.match(/\{[\s\S]*\}/);
+    if (!match) {
+      return {};
+    }
+
+    try {
+      return JSON.parse(match[0]) as Record<string, unknown>;
+    } catch {
+      // Try a relaxed fallback in case the model adds trailing commas.
+      const normalized = match[0]
+        .replace(/,\s*}/g, '}')
+        .replace(/,\s*]/g, ']');
+
+      try {
+        return JSON.parse(normalized) as Record<string, unknown>;
+      } catch {
+        return {};
+      }
     }
   }
 }

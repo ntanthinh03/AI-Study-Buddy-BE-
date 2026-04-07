@@ -3,7 +3,7 @@ import { AuthGuard } from '@nestjs/passport'; // ✅ Bảo vệ API bằng JWT
 import { QuizzesService } from './quizzes.service';
 
 @Controller('quizzes')
-@UseGuards(AuthGuard('jwt')) // 🔒 Chỉ những ai đã đăng nhập mới được "xài" Gemini tạo Quiz
+@UseGuards(AuthGuard('jwt')) // 🔒 Chỉ những ai đã đăng nhập mới được "xài" local AI tạo Quiz
 export class QuizzesController {
   constructor(private readonly quizzesService: QuizzesService) {}
 

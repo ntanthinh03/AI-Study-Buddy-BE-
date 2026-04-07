@@ -32,7 +32,7 @@ export class QuizzesService {
     throw new Error('⚠️ Không thể đọc được nội dung từ file PDF này (có thể là file ảnh scan).');
   }
 
-  // Nếu mọi thứ OK, gọi Gemini tạo Quiz
+  // Nếu mọi thứ OK, gọi local AI tạo Quiz
   return await this.aiService.generateQuiz(document.contentText);
 }
 async saveQuiz(questions: any, documentId: string, userId: string) {
