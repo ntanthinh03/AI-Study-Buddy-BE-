@@ -1,10 +1,9 @@
-// src/chat/chat.module.ts
 import { Module } from '@nestjs/common';
 import { ChatController } from './chat.controller';
-import { ChatService } from './chat.service'; // 👈 Nhớ import nó vào nhé
+import { ChatService } from './chat.service';
 
 @Module({
   controllers: [ChatController],
-  providers: [ChatService], // 🚀 "Đăng ký" Service ở đây để Controller có thể dùng
+  providers: [ChatService],
 })
 export class ChatModule {}

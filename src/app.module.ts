@@ -12,7 +12,6 @@ import { ChatModule } from './chat/chat.module';
 import { RagModule } from './modules/rag/rag.module';
 import { AiModule } from './modules/ai/rag.module';
 
-
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -29,18 +28,18 @@ import { AiModule } from './modules/ai/rag.module';
         port: parseInt(configService.get<string>('DB_PORT') ?? '5432'),
         username: configService.get<string>('DB_USERNAME') ?? 'postgres',
         password: configService.get<string>('DB_PASSWORD') ?? '1',
-        database: configService.get<string>('DB_DATABASE') ?? 'postgres', 
+        database: configService.get<string>('DB_DATABASE') ?? 'postgres',
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
         autoLoadEntities: true,
-        synchronize: true, 
+        synchronize: true,
       }),
     }),
 
-    UsersModule,    
-    AuthModule,     
-    DocumentsModule, 
-    QuizzesModule,   
-    ProgressModule, 
+    UsersModule,
+    AuthModule,
+    DocumentsModule,
+    QuizzesModule,
+    ProgressModule,
     ChatModule,
     RagModule,
     AiModule,

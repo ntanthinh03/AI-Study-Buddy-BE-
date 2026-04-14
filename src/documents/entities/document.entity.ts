@@ -1,4 +1,11 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 
 @Entity('documents')
@@ -20,6 +27,12 @@ export class Document {
 
   @Column({ type: 'text', nullable: true })
   summary!: string | null;
+
+  @Column({ name: 'summary_status', default: 'PROCESSING' })
+  summaryStatus!: string;
+
+  @Column({ name: 'rag_status', default: 'PENDING' })
+  ragStatus!: string;
 
   @Column({ default: 'PROCESSING' })
   status!: string;

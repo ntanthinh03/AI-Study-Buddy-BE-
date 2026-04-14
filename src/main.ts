@@ -5,6 +5,7 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import * as express from 'express';
 import { HttpLoggingInterceptor } from './common/interceptors/http-logging.interceptor';
+import type { NextFunction, Request, Response } from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -12,9 +13,11 @@ async function bootstrap() {
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-  app.use((req, res, next) => {
+  app.use((req: Request, res: Response, next: NextFunction) => {
     const startedAt = Date.now();
-    const hasAuthHeader = typeof req.headers.authorization === 'string' && req.headers.authorization.length > 0;
+    const hasAuthHeader =
+      typeof req.headers.authorization === 'string' &&
+      req.headers.authorization.length > 0;
 
     console.log(
       `[HTTP-IN] ${req.method} ${req.originalUrl} | auth=${hasAuthHeader ? 'yes' : 'no'}`,
@@ -32,18 +35,23 @@ async function bootstrap() {
 
   app.enableCors();
 
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true,
-  }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
 
   app.useGlobalInterceptors(new HttpLoggingInterceptor());
 
   const preferredPort = Number(process.env.PORT ?? 3001);
   const ollamaBaseUrl = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434';
-  const ollamaTextModel = process.env.OLLAMA_TEXT_MODEL ?? 'qwen2.5:14b-instruct';
-  const ollamaVisionModel = process.env.OLLAMA_VISION_MODEL ?? 'llama3.2-vision:11b';
+  const ollamaTextModel =
+    process.env.OLLAMA_TEXT_MODEL ?? 'qwen2.5:14b-instruct';
+  const ollamaVisionModel =
+    process.env.OLLAMA_VISION_MODEL ?? 'llama3.2-vision:11b';
+  const preferredQuantization = 'Q4_K_M';
 
   let activePort = preferredPort;
   let started = false;
@@ -78,8 +86,11 @@ async function bootstrap() {
   console.log(`\n--- AI STUDY BUDDY BACKEND ---`);
   console.log(`Server status : Running on http://localhost:${activePort}`);
   console.log(`Local AI      : Ollama connected at ${ollamaBaseUrl}`);
+  console.log(
+    `Quantization  : ${preferredQuantization} recommended for all local models`,
+  );
   console.log(`Text model    : ${ollamaTextModel}`);
   console.log(`Vision model  : ${ollamaVisionModel}`);
   console.log(`-------------------------------\n`);
 }
-bootstrap();
+void bootstrap();

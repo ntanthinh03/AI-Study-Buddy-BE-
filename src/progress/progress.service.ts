@@ -1,27 +1,27 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThan } from 'typeorm'; // Sử dụng MoreThan để tìm bài tiếp theo
+import { Repository, MoreThan } from 'typeorm';
 import { UserProgress } from './entities/user-progress.entity';
 import { Document } from '../documents/entities/document.entity';
+import { LearningLesson } from './entities/learning-lesson.entity';
+import { SaveLessonDto } from './dto/save-lesson.dto';
 
 @Injectable()
 export class ProgressService {
   constructor(
     @InjectRepository(UserProgress)
     private progressRepository: Repository<UserProgress>,
+    @InjectRepository(LearningLesson)
+    private lessonRepository: Repository<LearningLesson>,
   ) {}
 
   async getTimeline(userId: string) {
     return await this.progressRepository.find({
       where: { userId },
       relations: ['document'],
-      order: { document: { createdAt: 'ASC' } }, // Sắp xếp theo thứ tự thời gian
+      order: { document: { createdAt: 'ASC' } },
     });
   }
-  /**
-   * Khởi tạo lộ trình học tập.
-   * Nếu là bài đầu tiên của user, nó sẽ được MỞ KHÓA tự động.
-   */
   async initializeProgress(userId: string, documentId: string) {
     const existing = await this.progressRepository.findOne({
       where: { userId, document: { id: documentId } },
@@ -29,35 +29,26 @@ export class ProgressService {
 
     if (existing) return existing;
 
-    // Kiểm tra xem user đã có bài nào chưa để quyết định khóa hay mở bài đầu tiên
     const count = await this.progressRepository.count({ where: { userId } });
 
     const newProgress = this.progressRepository.create({
       userId,
       document: { id: documentId } as Document,
       isCompleted: false,
-      isLocked: count > 0, // Nếu là bài thứ 2 trở đi thì mới khóa
+      isLocked: count > 0,
     });
 
     return await this.progressRepository.save(newProgress);
   }
 
-  /**
-   * Lấy toàn bộ Timeline cho App Android hiển thị.
-   */
   async getMyProgress(userId: string) {
     return await this.progressRepository.find({
       where: { userId },
       relations: ['document'],
-      order: { document: { createdAt: 'ASC' } }, // Sắp xếp theo thứ tự thời gian upload
+      order: { document: { createdAt: 'ASC' } },
     });
   }
-
-  /**
-   * Logic quan trọng nhất: Hoàn thành bài hiện tại và MỞ KHÓA bài tiếp theo.
-   */
   async unlockNextModule(userId: string, documentId: string, score: number) {
-    // 1. Tìm và cập nhật trạng thái bài hiện tại
     const currentProgress = await this.progressRepository.findOne({
       where: { userId, document: { id: documentId } },
       relations: ['document'],
@@ -66,10 +57,9 @@ export class ProgressService {
     if (currentProgress) {
       currentProgress.isCompleted = true;
       currentProgress.highestScore = score;
-      currentProgress.isLocked = false; 
+      currentProgress.isLocked = false;
       await this.progressRepository.save(currentProgress);
 
-      // 2. TÌM BÀI TIẾP THEO: Dựa trên thời gian tạo (createdAt) lớn hơn bài vừa xong
       const nextProgress = await this.progressRepository.findOne({
         where: {
           userId,
@@ -79,14 +69,67 @@ export class ProgressService {
         order: { document: { createdAt: 'ASC' } },
       });
 
-      // 3. Mở khóa bài tiếp theo nếu tìm thấy
       if (nextProgress) {
         nextProgress.isLocked = false;
         await this.progressRepository.save(nextProgress);
-        return { message: 'Current module completed, next module unlocked!', nextModule: nextProgress.id };
+        return {
+          message: 'Current module completed, next module unlocked!',
+          nextModule: nextProgress.id,
+        };
       }
     }
 
     return { message: 'Module updated successfully.' };
+  }
+
+  async saveLesson(userId: string, dto: SaveLessonDto) {
+    const lesson = this.lessonRepository.create({
+      userId,
+      documentId: dto.documentId ?? null,
+      title: dto.title,
+      contentText: dto.contentText,
+      lastStudiedAt: new Date(),
+    });
+
+    return await this.lessonRepository.save(lesson);
+  }
+
+  async getMyLessons(userId: string) {
+    return await this.lessonRepository.find({
+      where: { userId },
+      order: { updatedAt: 'DESC' },
+    });
+  }
+
+  async getLessonById(userId: string, lessonId: string) {
+    const lesson = await this.lessonRepository.findOne({
+      where: { id: lessonId, userId },
+    });
+
+    if (!lesson) {
+      throw new NotFoundException('Lesson not found');
+    }
+
+    return lesson;
+  }
+
+  async saveLessonQuiz(userId: string, lessonId: string, quiz: unknown[]) {
+    const lesson = await this.lessonRepository.findOne({
+      where: { id: lessonId, userId },
+    });
+
+    if (!lesson) {
+      throw new NotFoundException('Lesson not found');
+    }
+
+    lesson.quizJson = quiz;
+    lesson.lastStudiedAt = new Date();
+    await this.lessonRepository.save(lesson);
+
+    return {
+      message: 'Lesson quiz saved successfully',
+      lessonId: lesson.id,
+      quizCount: Array.isArray(quiz) ? quiz.length : 0,
+    };
   }
 }

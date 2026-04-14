@@ -4,21 +4,20 @@ import { Document } from '../../documents/entities/document.entity';
 @Entity('user_progress')
 export class UserProgress {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column({ nullable: true })
-  userId: string;
+  userId!: string;
 
   @ManyToOne(() => Document)
-  document: Document;
+  document!: Document;
 
   @Column({ default: false })
-  isCompleted: boolean;
+  isCompleted!: boolean;
 
   @Column({ default: true })
-  isLocked: boolean;
+  isLocked!: boolean;
 
-  // ✅ ADD THIS COLUMN: This stores the best score the student achieved
   @Column({ type: 'float', nullable: true })
-  highestScore: number;
+  highestScore!: number;
 }

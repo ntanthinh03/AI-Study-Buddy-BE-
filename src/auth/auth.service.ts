@@ -1,24 +1,36 @@
-import { Injectable, UnauthorizedException, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config'; // ✅ Thêm để đọc .env
+import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../users/users.service';
 import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from './dto/login.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import * as bcrypt from 'bcrypt';
-import * as crypto from 'crypto'; // Thư viện có sẵn của Node.js
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { PasswordReset } from './entities/password-reset.entity';
+import { User } from '../users/entities/user.entity';
 
 @Injectable()
 export class AuthService {
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
-    private configService: ConfigService, // ✅ Inject ConfigService
+    private configService: ConfigService,
+    @InjectRepository(PasswordReset)
+    private passwordResetRepository: Repository<PasswordReset>,
   ) {}
 
-  // 1. ĐĂNG KÝ: Dùng DTO để validate dữ liệu từ đầu
   async register(dto: RegisterDto) {
     const userExists = await this.usersService.findByEmail(dto.email);
     if (userExists) {
-        throw new BadRequestException('Email này đã được sử dụng rồi!');
+      throw new BadRequestException('This email address is already in use.');
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
@@ -27,61 +39,120 @@ export class AuthService {
       email: dto.email,
       password: hashedPassword,
       fullName: dto.fullName,
+      phoneNumber: dto.phoneNumber,
       provider: 'local',
     });
   }
 
-  // 2. ĐĂNG NHẬP: So khớp vân tay mật khẩu
-  async login(loginDto: any) {
-  const { email, password } = loginDto;
-  const user = await this.usersService.findByEmail(email);
+  async login(loginDto: LoginDto) {
+    const { email, password } = loginDto;
+    const user = await this.usersService.findByEmail(email);
 
-  if (!user) {
-    throw new UnauthorizedException('Email không tồn tại!');
+    if (!user) {
+      throw new UnauthorizedException('The email address does not exist.');
+    }
+
+    const isPasswordMatching = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordMatching) {
+      throw new UnauthorizedException('The password is incorrect.');
+    }
+
+    return this.generateTokens(user);
   }
 
-  // Bây giờ user.password đã có giá trị chứ không còn undefined nữa
-  const isPasswordMatching = await bcrypt.compare(password, user.password);
-  
-  if (!isPasswordMatching) {
-    throw new UnauthorizedException('Mật khẩu sai rồi Thinh ơi!');
-  }
-
-  return this.generateTokens(user);
-}
-
-  // 3. TẠO TOKEN: Đọc Secret từ file .env
-  private async generateTokens(user: any) {
+  private async generateTokens(user: User) {
     const payload = { sub: user.id, email: user.email };
-    
+
     return {
       access_token: await this.jwtService.signAsync(payload, {
         expiresIn: '1h',
-        // ✅ Lấy từ .env giúp bảo mật tuyệt đối
-        secret: this.configService.get<string>('JWT_SECRET'), 
+        secret:
+          this.configService.get<string>('JWT_SECRET') || 'fallback_secret_key',
       }),
       user: {
         id: user.id,
         email: user.email,
         fullName: user.fullName,
-      }
+        phoneNumber: user.phoneNumber,
+      },
     };
   }
 
-  // 4. QUÊN MẬT KHẨU: Lưu vào bảng password_resets đã tạo ở SQL
-  async forgotPassword(email: string) {
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const user = await this.usersService.findByEmail(dto.email);
+    if (!user) {
+      throw new NotFoundException('No account was found for this email address.');
+    }
+
+    if (!user.phoneNumber) {
+      await this.passwordResetRepository.save({
+        user,
+        requestedEmail: dto.email,
+        requestedPhone: dto.phoneNumber,
+        isSuccessful: false,
+        reason: 'User has no phone number',
+      });
+      throw new BadRequestException('The account does not have a phone number for verification.');
+    }
+
+    const normalizedPhone = this.normalizePhone(user.phoneNumber);
+    const normalizedRequestedPhone = this.normalizePhone(dto.phoneNumber);
+
+    if (normalizedPhone !== normalizedRequestedPhone) {
+      await this.passwordResetRepository.save({
+        user,
+        requestedEmail: dto.email,
+        requestedPhone: dto.phoneNumber,
+        isSuccessful: false,
+        reason: 'Phone mismatch',
+      });
+      throw new UnauthorizedException('The email address or phone number is incorrect.');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
+    await this.usersService.updatePassword(user.id, hashedPassword);
+
+    await this.passwordResetRepository.save({
+      user,
+      requestedEmail: dto.email,
+      requestedPhone: dto.phoneNumber,
+      isSuccessful: true,
+      reason: 'Password reset success',
+    });
+
+    return { message: 'Password reset completed successfully.' };
+  }
+
+  async changePassword(email: string, dto: ChangePasswordDto) {
+    if (!email) {
+      throw new UnauthorizedException('Unauthorized');
+    }
+
     const user = await this.usersService.findByEmail(email);
-    if (!user) throw new NotFoundException('Không tìm thấy User với email này');
+    if (!user) {
+      throw new NotFoundException('No account was found.');
+    }
 
-    // Tạo mã token ngẫu nhiên và an toàn hơn Math.random
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 3600000); // Hết hạn sau 1 tiếng
+    if (!user.password) {
+      throw new BadRequestException('The account does not use a local password.');
+    }
 
-    // ✅ Ở ĐÂY: Thinh gọi Repository để lưu vào bảng password_resets
-    // await this.passwordResetRepository.save({ userId: user.id, token: resetToken, expiresAt });
-    
-    console.log(`📡 Gửi Email tới ${email} kèm link: http://localhost:3000/reset-password?token=${resetToken}`);
-    
-    return { message: 'Link reset mật khẩu đã được gửi vào Email của bạn!' };
+    const isOldPasswordMatching = await bcrypt.compare(
+      dto.oldPassword,
+      user.password,
+    );
+    if (!isOldPasswordMatching) {
+      throw new UnauthorizedException('The current password is incorrect.');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
+    await this.usersService.updatePassword(user.id, hashedPassword);
+
+    return { message: 'Password changed successfully.' };
+  }
+
+  private normalizePhone(phone: string) {
+    return phone.replace(/\D/g, '');
   }
 }

@@ -7,7 +7,7 @@ export class AiController {
 
   @Post('ask')
   async ask(@Body('question') question: string) {
-    if (!question) return { error: "Question is required" };
+    if (!question) return { error: 'Question is required' };
     return await this.aiService.generateResponse(question);
   }
 }

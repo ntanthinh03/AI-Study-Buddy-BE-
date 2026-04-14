@@ -4,15 +4,19 @@ import { DocumentsController } from './documents.controller';
 import { DocumentsService } from './documents.service';
 import { Document } from './entities/document.entity';
 import { AIService } from './ai.service';
-import { ProgressModule } from '../progress/progress.module'; // ✅ 1. Import the ProgressModule
+import { ProgressModule } from '../progress/progress.module';
 import { ChatMessage } from './entities/chat-message.entity';
+import { RagModule } from '../modules/rag/rag.module';
+import { Conversation } from './entities/conversation.entity';
+import { ConversationsController } from './conversations.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Document, ChatMessage]), // Already there
-    ProgressModule, // ✅ 2. Add ProgressModule here to resolve dependencies
+    TypeOrmModule.forFeature([Document, ChatMessage, Conversation]),
+    ProgressModule,
+    RagModule,
   ],
-  controllers: [DocumentsController],
+  controllers: [DocumentsController, ConversationsController],
   providers: [DocumentsService, AIService],
   exports: [DocumentsService, AIService],
 })

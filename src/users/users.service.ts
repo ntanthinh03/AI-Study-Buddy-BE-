@@ -11,14 +11,27 @@ export class UsersService {
   ) {}
 
   async findByEmail(email: string): Promise<User | null> {
-    return this.usersRepository.findOne({ 
+    return this.usersRepository.findOne({
       where: { email },
-      select: ['id', 'email', 'password', 'fullName', 'provider', 'avatar', 'googleId'] 
+      select: [
+        'id',
+        'email',
+        'password',
+        'fullName',
+        'provider',
+        'avatar',
+        'googleId',
+        'phoneNumber',
+      ],
     });
   }
 
   async create(userData: Partial<User>): Promise<User> {
     const newUser = this.usersRepository.create(userData);
     return this.usersRepository.save(newUser);
+  }
+
+  async updatePassword(userId: string, hashedPassword: string): Promise<void> {
+    await this.usersRepository.update(userId, { password: hashedPassword });
   }
 }

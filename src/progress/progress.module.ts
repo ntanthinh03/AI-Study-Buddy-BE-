@@ -1,14 +1,14 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserProgress } from './entities/user-progress.entity';
+import { LearningLesson } from './entities/learning-lesson.entity';
 import { ProgressController } from './progress.controller';
 import { ProgressService } from './progress.service';
 
-
 @Module({
-  imports: [TypeOrmModule.forFeature([UserProgress])],
+  imports: [TypeOrmModule.forFeature([UserProgress, LearningLesson])],
   controllers: [ProgressController],
   providers: [ProgressService],
-  exports: [ProgressService], // ✅ Must be exported to be visible in DocumentsModule!
+  exports: [ProgressService],
 })
 export class ProgressModule {}

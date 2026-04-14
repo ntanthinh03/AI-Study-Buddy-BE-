@@ -1,15 +1,25 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
 
 export class RegisterDto {
-  @IsEmail({}, { message: 'Email không hợp lệ rồi Thinh ơi!' })
+  @IsEmail({}, { message: 'The email address is invalid.' })
   @IsNotEmpty()
-  email: string;
+  email!: string;
 
   @IsString()
-  @MinLength(6, { message: 'Mật khẩu phải có ít nhất 6 ký tự nhé' })
-  password: string;
+  @MinLength(6, { message: 'The password must be at least 6 characters long.' })
+  password!: string;
 
   @IsString()
-  @IsNotEmpty({ message: 'Đừng quên nhập họ tên' })
-  fullName: string;
+  @IsNotEmpty({ message: 'The full name is required.' })
+  fullName!: string;
+
+  @IsOptional()
+  @IsString()
+  phoneNumber?: string;
 }

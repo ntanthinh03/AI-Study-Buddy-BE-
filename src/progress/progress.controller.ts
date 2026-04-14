@@ -1,21 +1,31 @@
-import { Controller, Get, Post, Body, Request, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Request,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ProgressService } from './progress.service';
+import { SaveLessonDto } from './dto/save-lesson.dto';
+import { SaveLessonQuizDto } from './dto/save-lesson-quiz.dto';
+import type { AuthenticatedRequest } from '../common/types/authenticated-request.type';
 
 @Controller('progress')
 @UseGuards(AuthGuard('jwt'))
 export class ProgressController {
   constructor(private readonly progressService: ProgressService) {}
 
-  // Lấy toàn bộ lộ trình học tập của user hiện tại
   @Get('me')
-  async getMyProgress(@Request() req) {
+  async getMyProgress(@Request() req: AuthenticatedRequest) {
     const userId = req.user.userId;
     return await this.progressService.getMyProgress(userId);
   }
 
   @Get('timeline')
-  async getMyTimeline(@Request() req) {
+  async getMyTimeline(@Request() req: AuthenticatedRequest) {
     const userId = req.user.userId;
     const data = await this.progressService.getTimeline(userId);
 
@@ -31,24 +41,66 @@ export class ProgressController {
     }));
   }
 
-  // Khởi tạo tiến độ học tập cho tài liệu mới
   @Post('init')
-  async initProgress(@Body() data: { documentId: string }, @Request() req) {
+  async initProgress(
+    @Body() data: { documentId: string },
+    @Request() req: AuthenticatedRequest,
+  ) {
     const userId = req.user.userId;
-    return await this.progressService.initializeProgress(userId, data.documentId);
+    return await this.progressService.initializeProgress(
+      userId,
+      data.documentId,
+    );
   }
 
-  // Đánh dấu hoàn thành module hiện tại và mở khóa module kế tiếp
   @Post('complete')
   async completeModule(
     @Body() data: { documentId: string; score: number },
-    @Request() req,
+    @Request() req: AuthenticatedRequest,
   ) {
     const userId = req.user.userId;
     return await this.progressService.unlockNextModule(
       userId,
       data.documentId,
       data.score,
+    );
+  }
+
+  @Post('lessons')
+  async saveLesson(
+    @Body() dto: SaveLessonDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    const userId = req.user.userId;
+    return await this.progressService.saveLesson(userId, dto);
+  }
+
+  @Get('lessons')
+  async getMyLessons(@Request() req: AuthenticatedRequest) {
+    const userId = req.user.userId;
+    return await this.progressService.getMyLessons(userId);
+  }
+
+  @Get('lessons/:lessonId')
+  async getLessonDetail(
+    @Param('lessonId') lessonId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    const userId = req.user.userId;
+    return await this.progressService.getLessonById(userId, lessonId);
+  }
+
+  @Post('lessons/:lessonId/quiz')
+  async saveLessonQuiz(
+    @Param('lessonId') lessonId: string,
+    @Body() dto: SaveLessonQuizDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    const userId = req.user.userId;
+    return await this.progressService.saveLessonQuiz(
+      userId,
+      lessonId,
+      dto.quiz,
     );
   }
 }

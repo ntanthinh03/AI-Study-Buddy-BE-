@@ -2,26 +2,34 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import type { StringValue } from 'ms';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { UsersModule } from '../users/users.module';
 import { JwtStrategy } from './jwt.strategy';
+import { PasswordReset } from './entities/password-reset.entity';
 
 @Module({
   imports: [
-    UsersModule, // Kết nối với module User
+    UsersModule,
+    TypeOrmModule.forFeature([PasswordReset]),
     PassportModule,
-    // Cấu hình JWT đọc từ .env
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: async (configService: ConfigService) => ({
-  secret: configService.get<string>('JWT_SECRET') || 'fallback_secret_key', 
-  
-  signOptions: {
-    expiresIn: configService.get<string>('JWT_EXPIRES_IN') || '1h',
-  } as any, 
-    }),
+      useFactory: (configService: ConfigService) => {
+        const jwtExpiresIn = (configService.get<string>('JWT_EXPIRES_IN') ??
+          '1h') as StringValue;
+
+        return {
+          secret:
+            configService.get<string>('JWT_SECRET') || 'fallback_secret_key',
+          signOptions: {
+            expiresIn: jwtExpiresIn,
+          },
+        };
+      },
     }),
   ],
   providers: [AuthService, JwtStrategy],

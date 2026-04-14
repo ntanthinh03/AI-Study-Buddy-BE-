@@ -1,11 +1,11 @@
-import { Module } from '@nestjs/common'; // Để dùng @Module
-import { TypeOrmModule } from '@nestjs/typeorm'; // Để dùng TypeOrmModule
-import { User } from './entities/user.entity'; // Để dùng thực thể User
-import { UsersService } from './users.service'; // Để dùng UsersService
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { User } from './entities/user.entity';
+import { UsersService } from './users.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature([User])],
   providers: [UsersService],
-  exports: [UsersService], // Rất quan trọng để AuthModule có thể dùng
+  exports: [UsersService],
 })
 export class UsersModule {}

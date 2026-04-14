@@ -5,6 +5,6 @@ import { RagService } from './rag.service';
 @Module({
   controllers: [RagController],
   providers: [RagService],
-  exports: [RagService], // Bắt buộc phải có để Module khác sử dụng được
+  exports: [RagService],
 })
 export class RagModule {}
