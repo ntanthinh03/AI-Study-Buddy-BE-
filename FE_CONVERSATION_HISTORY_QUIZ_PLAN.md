@@ -1,161 +1,96 @@
-# FE Guide - Conversation History with Quiz + Study Plan
+# FE Guide: Conversation History, Quiz, and Study Plan
 
-Canonical endpoint naming and global FE order: [FE_API_INDEX.md](FE_API_INDEX.md)
+Canonical index: [FE_API_INDEX.md](FE_API_INDEX.md)
 
-This guide explains how account-scoped conversations are stored and how quiz/study-plan artifacts are attached to each conversation.
+This guide explains how FE should load, render, and delete account-scoped conversation data.
 
-## 1) Scope and Ownership
+## 1) Ownership and Scope
 
-- Conversation metadata is stored in table `conversations`.
-- Message history is stored in table `chat_messages`.
-- Every message row is tied to:
-  - `user_id` (account owner)
-  - `document_id` (document tab)
-  - `conversation_id` (conversation thread)
-- Users only read their own history.
+- Conversation metadata is stored in `conversations`.
+- Message rows are stored in `chat_messages`.
+- Every read/write action is scoped by JWT user.
 
-## 1.1) One-time conversation loading
+Important behavior:
 
-FE should first load the conversation list once for the signed-in account:
+- A user can only read or delete their own conversations.
+- Cross-account conversation access is not allowed.
+
+## 2) Primary APIs for Inbox Experience
+
+All endpoints below require `Authorization: Bearer <access_token>`.
+
+### Load conversation list
 
 - `GET /conversations`
 
-This endpoint returns only conversations owned by the current JWT user, each with the linked `document` relation.
-Use it to render the drawer/inbox once, then load messages for a selected conversation.
+Use for sidebar/drawer/inbox list.
 
-## 2) Message Types in History
+### Load one thread
 
-`GET /documents/:id/history` returns the saved message rows for one document and includes these message types:
+- `GET /conversations/:conversationId/messages`
 
-1. QA message
+Use when user opens a thread.
+
+### Delete one thread
+
+- `DELETE /conversations/:conversationId`
+
+Success response:
+
+```json
+{
+  "message": "Conversation deleted successfully."
+}
+```
+
+404 means the thread does not exist or does not belong to the current account.
+
+## 3) Message Types and Rendering
+
+Conversation messages can be:
+
+1. QA
+
 - `messageType: "QA"`
 - fields: `question`, `answer`
 
-2. Artifact message
+2. Artifact
+
 - `messageType: "ARTIFACT"`
 - `artifactType: "QUIZ" | "STUDY_PLAN"`
-- `artifactJson`: saved JSON payload for that quiz/plan
-- optional `question` used as note
+- `artifactJson` holds persisted content
 
-## 3) APIs FE should use
+Recommended rendering:
 
-All APIs below require JWT Bearer token.
+- QA: normal chat bubble pair
+- Artifact + QUIZ: quiz card
+- Artifact + STUDY_PLAN: study plan card
 
-### A) Load all conversations for current account
-- `GET /conversations`
-- returns only that account's conversations
+## 4) Related Write Flows
 
-Example response:
-```json
-[
-  {
-    "id": "conv-uuid",
-    "userId": "user-uuid",
-    "documentId": "doc-001",
-    "title": "sql-basics.pdf",
-    "kind": "PLAN",
-    "lastMessagePreview": "Generated study plan",
-    "lastArtifactType": "STUDY_PLAN",
-    "lastMessageAt": "2026-04-14T09:20:00.000Z",
-    "document": {
-      "id": "doc-001",
-      "fileName": "sql-basics.pdf"
-    }
-  }
-]
-```
+These APIs create data that appears in conversation history:
 
-### B) Load messages for a conversation
-- `GET /conversations/:conversationId/messages`
-- returns only messages owned by the current account for that conversation, ordered oldest to newest
-
-Example response:
-```json
-[
-  {
-    "id": "msg-1",
-    "messageType": "QA",
-    "question": "Explain joins in SQL",
-    "answer": "...",
-    "artifactType": null,
-    "artifactJson": null,
-    "createdAt": "2026-04-14T09:00:00.000Z"
-  },
-  {
-    "id": "msg-2",
-    "messageType": "ARTIFACT",
-    "question": "Generated study plan",
-    "answer": null,
-    "artifactType": "STUDY_PLAN",
-    "artifactJson": { "planId": "..." },
-    "createdAt": "2026-04-14T09:20:00.000Z"
-  }
-]
-```
-
-### A) Ask normal chat and persist QA
 - `POST /documents/:id/chat`
-- body:
-```json
-{
-  "question": "Explain joins in SQL"
-}
-```
-
-### B) Generate quiz and auto-attach to conversation
 - `POST /quizzes/generate/:documentId`
-- backend auto-saves:
-  - quiz row in `quizzes`
-  - artifact message (`artifactType = QUIZ`) in `chat_messages`
-
-### C) Generate study plan and auto-attach to conversation
 - `POST /documents/:id/study-plan`
-- response:
-```json
-{
-  "studyPlan": {
-    "planId": "...",
-    "title": "...",
-    "overview": "...",
-    "estimatedTotalMinutes": 120,
-    "modules": [ ... ]
-  }
-}
-```
-- backend auto-saves artifact message (`artifactType = STUDY_PLAN`) in `chat_messages`
-
-### D) Save custom artifact from FE into conversation
 - `POST /documents/:id/history/artifact`
-- body:
-```json
-{
-  "artifactType": "QUIZ",
-  "artifact": [ ... ],
-  "note": "Generated quiz v2"
-}
-```
-- returns the saved artifact message row
 
-### E) Reload full conversation history
+Notes:
+
+- Quiz and study plan generation persist artifact history rows.
+- FE should refresh the opened thread after successful generation/save.
+
+## 5) Document-Specific History Endpoint
+
 - `GET /documents/:id/history`
 
-Use this only if FE is already on a document screen. For inbox/list screen, prefer `GET /conversations` first.
+Use this endpoint for document detail screens. For inbox-first screens, prefer conversation endpoints.
 
-## 4) FE rendering rule
+## 6) FE Checklist
 
-When mapping history items:
-
-- If `messageType == "QA"`: render normal chat bubble with `question` and `answer`.
-- If `messageType == "ARTIFACT"` and `artifactType == "QUIZ"`: render quiz card from `artifactJson`.
-- If `messageType == "ARTIFACT"` and `artifactType == "STUDY_PLAN"`: render study-plan card from `artifactJson`.
-
-This ensures old conversations reopen with the exact quiz/plan created at that time.
-
-## 5) FE checklist
-
-- [ ] Use account token for all endpoints above
-- [ ] Load `GET /conversations` once after login for inbox/drawer
-- [ ] After creating quiz/plan, refresh `GET /documents/:id/history`
-- [ ] Render by `messageType` + `artifactType`
-- [ ] Do not mix histories across document tabs
-- [ ] Handle empty `question/answer` for artifact rows
+- [ ] Load inbox with `GET /conversations` after login.
+- [ ] Open thread with `GET /conversations/:conversationId/messages`.
+- [ ] Render by `messageType` and `artifactType`.
+- [ ] On delete confirm, call `DELETE /conversations/:conversationId`.
+- [ ] After delete, remove item from UI list and refresh from backend.
+- [ ] If delete returns 404, treat item as already removed and refresh list.

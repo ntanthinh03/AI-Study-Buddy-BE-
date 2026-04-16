@@ -40,6 +40,8 @@ async function bootstrap() {
     process.env.OLLAMA_VISION_MODEL ?? 'llama3.2-vision:11b';
   const preferredQuantization = 'Q4_K_M';
 
+  bootstrapLogger.log(BOOT_MESSAGES.PORT_PREFERENCE(preferredPort));
+
   let activePort = preferredPort;
   let started = false;
   const maxAttempts = 20;
@@ -73,6 +75,7 @@ async function bootstrap() {
     );
   }
 
+  bootstrapLogger.log(BOOT_MESSAGES.ACTIVE_PORT(activePort));
   bootstrapLogger.log(BOOT_MESSAGES.READY(activePort));
   bootstrapLogger.log(BOOT_MESSAGES.OLLAMA(ollamaBaseUrl));
   bootstrapLogger.log(BOOT_MESSAGES.QUANTIZATION(preferredQuantization));

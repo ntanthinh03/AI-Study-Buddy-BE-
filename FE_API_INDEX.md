@@ -1,30 +1,61 @@
-# FE API Index - Canonical Endpoint Guide
+# FE API Index (Developer Handover)
 
-This file is the single source of truth for endpoint naming used by FE.
+This document is the entry point for frontend and QA developers. It summarizes the active backend API surface that FE should consume.
 
-## Naming Rules
+## Core Rules
 
-- Use `/auth/*` for authentication and password flows.
-- Use `/documents/*` for document upload, chat, and conversation history by document.
-- Use `/conversations/*` for account-scoped inbox and message loading.
-- Use `/quizzes/*` for quiz generation and quiz list.
-- Use `/progress/*` for progress timeline and lesson history.
-- Use `GET` for reading data, `POST` for creating/saving data, `DELETE` for removing data.
+- Authentication endpoint group: `/auth/*`
+- Document processing and document-scoped history: `/documents/*`
+- Account-scoped inbox and thread management: `/conversations/*`
+- General chat (non-document): `/chat/*`
+- Quiz endpoints: `/quizzes/*`
+- Progress and lesson tracking: `/progress/*`
+
+All protected APIs require:
+
+`Authorization: Bearer <access_token>`
 
 ## Canonical Endpoints
 
 ### Auth
+
 - `POST /auth/register`
 - `POST /auth/login`
 - `POST /auth/forgot-password`
 - `POST /auth/change-password`
 
-Response notes:
-- `POST /auth/login` returns `{ access_token, user }` where `user` includes `id`, `email`, `fullName`, and `phoneNumber`.
-- `POST /auth/forgot-password` returns `{ message: "Đặt lại mật khẩu thành công" }`.
-- `POST /auth/change-password` returns `{ message: "Đổi mật khẩu thành công" }`.
+Contract notes:
 
-### Documents and chat history
+- Register requires `email`, `password`, `fullName`, and `phoneNumber`.
+- Login response returns `{ access_token, user }`.
+- Forgot password success response returns `{ message: "Password reset completed successfully." }`.
+- Change password success response returns `{ message: "Password changed successfully." }`.
+
+### Conversations (Account Inbox)
+
+- `GET /conversations`
+- `GET /conversations/:conversationId/messages`
+- `DELETE /conversations/:conversationId`
+
+Contract notes:
+
+- Conversations are user-scoped by JWT.
+- Delete returns `{ message: "Conversation deleted successfully." }`.
+- Delete returns 404 when conversation does not exist or does not belong to the current user.
+
+### General Chat
+
+- `POST /chat/ask`
+- `POST /chat/ask-image`
+- `GET /chat/messages/:messageId/image`
+
+Contract notes:
+
+- `POST /chat/ask` and `POST /chat/ask-image` support `conversationId` to append to an existing thread.
+- If `conversationId` is omitted, backend creates a new conversation automatically.
+
+### Documents
+
 - `POST /documents/upload`
 - `GET /documents`
 - `DELETE /documents/:id`
@@ -33,29 +64,19 @@ Response notes:
 - `POST /documents/:id/study-plan`
 - `POST /documents/:id/history/artifact`
 
-Response notes:
+Contract notes:
+
 - `POST /documents/:id/chat` returns `{ answer }`.
 - `POST /documents/:id/study-plan` returns `{ studyPlan }`.
-- `GET /documents/:id/history` returns raw chat message rows ordered oldest to newest.
-- `POST /documents/:id/history/artifact` returns the saved artifact message row.
-
-### Conversations inbox
-- `GET /conversations`
-- `GET /conversations/:conversationId/messages`
-
-Response notes:
-- `GET /conversations` returns conversation rows with the linked `document` relation.
-- `GET /conversations/:conversationId/messages` returns the saved message rows for that conversation.
+- `GET /documents/:id/history` returns message rows ordered by `createdAt` ascending.
 
 ### Quizzes
+
 - `POST /quizzes/generate/:documentId`
 - `GET /quizzes`
 
-Response notes:
-- `POST /quizzes/generate/:documentId` returns the generated quiz question array.
-- `GET /quizzes` returns saved quiz rows with the linked `document` relation.
-
 ### Progress
+
 - `GET /progress/me`
 - `GET /progress/timeline`
 - `POST /progress/init`
@@ -65,24 +86,21 @@ Response notes:
 - `GET /progress/lessons/:lessonId`
 - `POST /progress/lessons/:lessonId/quiz`
 
-Response notes:
-- `GET /progress/timeline` returns `{ documentId, fileName, status, score }` items.
-- `POST /progress/complete` returns `{ message }` and may include `nextModule`.
-- `POST /progress/lessons/:lessonId/quiz` returns `{ message, lessonId, quizCount }`.
+Contract notes:
 
-## FE Loading Strategy
+- `documentId` in `POST /progress/init` and `POST /progress/complete` must be a UUID document id from backend (not placeholders like `doc-001`).
 
-1. After login, load `GET /conversations` once for the inbox.
-2. When user opens a conversation, load `GET /conversations/:conversationId/messages`.
-3. When user opens a document screen, load `GET /documents/:id/history` if needed.
-4. Use `GET /progress/timeline` for roadmap UI.
-5. Use lesson APIs only for saved lesson history and lesson quiz practice.
+## Recommended FE Boot Sequence
 
-## Related Focused Guides
+1. Login and store `access_token`.
+2. Load `GET /conversations` for drawer/inbox.
+3. Load `GET /progress/timeline` for roadmap/home overview.
+4. Lazy-load conversation messages via `GET /conversations/:conversationId/messages` when a thread is opened.
 
-- Password and recovery: [FE_AUTH_PASSWORD_APIS.md](FE_AUTH_PASSWORD_APIS.md)
-- Conversation history and artifacts: [FE_CONVERSATION_HISTORY_QUIZ_PLAN.md](FE_CONVERSATION_HISTORY_QUIZ_PLAN.md)
-- Progress timeline: [FE_PROGRESS_JSON_API_GUIDE.md](FE_PROGRESS_JSON_API_GUIDE.md)
+## Focused Documents
 
-Lesson history and quiz are included in the progress guide above, so there are only three core guides to read.
+- Password flows: [FE_AUTH_PASSWORD_APIS.md](FE_AUTH_PASSWORD_APIS.md)
+- Conversation, quiz, and study plan rendering: [FE_CONVERSATION_HISTORY_QUIZ_PLAN.md](FE_CONVERSATION_HISTORY_QUIZ_PLAN.md)
+- Progress and lesson quiz payloads: [FE_PROGRESS_JSON_API_GUIDE.md](FE_PROGRESS_JSON_API_GUIDE.md)
+- FE/BE alignment recommendations: [FE_BE_ALIGNMENT_RECOMMENDATIONS.md](FE_BE_ALIGNMENT_RECOMMENDATIONS.md)
 

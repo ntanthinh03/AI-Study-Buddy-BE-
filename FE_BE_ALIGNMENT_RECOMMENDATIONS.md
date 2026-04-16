@@ -1,98 +1,83 @@
-# FE Team Recommendations to Align with Backend
+# FE-BE Alignment Recommendations
 
-This note summarizes the most important frontend changes to stay aligned with the current backend contract.
+This document captures practical rules for keeping frontend behavior aligned with the current backend contract.
 
-## 1) Conversation Loading
+## 1) Conversation as the Primary Inbox Unit
 
-Use the new conversation inbox flow as the main source of truth:
+Use conversation endpoints as the default chat source:
 
-- `GET /conversations` after login to load the current account's conversation list.
-- `GET /conversations/:conversationId/messages` when the user opens a specific conversation.
+- `GET /conversations`
+- `GET /conversations/:conversationId/messages`
+- `DELETE /conversations/:conversationId`
 
-Recommended behavior:
-- Treat the conversation inbox as account-scoped.
-- Do not mix conversations between different accounts.
-- Use `GET /documents/:id/history` only as a document-specific fallback or detail view.
+Guidelines:
 
-## 2) Message Rendering Rules
+- Conversations are account-scoped by JWT.
+- Never merge conversation data between accounts.
+- If delete returns 404, treat the record as already removed and refresh list.
 
-Backend history can contain two message types:
+## 2) Message Rendering Contract
 
-- `QA`
-- `ARTIFACT`
+Message rows can contain:
 
-Render them like this:
-- `QA` -> normal chat bubble with question and answer.
-- `ARTIFACT` + `QUIZ` -> quiz card from `artifactJson`.
-- `ARTIFACT` + `STUDY_PLAN` -> study plan card from `artifactJson`.
+- `messageType = QA`
+- `messageType = ARTIFACT`
 
-## 3) Study Plan Flow
+Rendering rules:
 
-Use the progress module for timeline and lesson tracking.
+- QA: render question and answer bubbles.
+- ARTIFACT + QUIZ: render quiz card using `artifactJson`.
+- ARTIFACT + STUDY_PLAN: render study plan card using `artifactJson`.
 
-Core endpoints:
+## 3) Document vs Conversation History
+
+- Use `GET /conversations/:conversationId/messages` for inbox thread view.
+- Use `GET /documents/:id/history` only when FE is explicitly on a document detail screen.
+
+This avoids mixing account inbox concerns with document detail concerns.
+
+## 4) Progress Module Integration
+
+Use these as canonical roadmap endpoints:
+
 - `GET /progress/timeline`
 - `POST /progress/init`
 - `POST /progress/complete`
+
+Lesson history and quiz persistence remain under:
+
 - `POST /progress/lessons`
 - `GET /progress/lessons`
 - `GET /progress/lessons/:lessonId`
 - `POST /progress/lessons/:lessonId/quiz`
 
-Recommended behavior:
-- Use `GET /progress/timeline` for roadmap UI.
-- Use lesson endpoints only for saved lesson history and quiz practice.
-- Keep lesson history inside the progress guide instead of creating separate flows.
+## 5) Password Flow Reliability
 
-## 4) Password Flow
+- Use `POST /auth/forgot-password` for recovery.
+- Use `POST /auth/change-password` for authenticated update.
+- Validate new password length client-side before sending.
 
-Use the current auth endpoints:
+## 6) Source of Truth Policy
 
-- `POST /auth/forgot-password`
-- `POST /auth/change-password`
+Use this rule consistently:
 
-Recommended behavior:
-- Validate password length on FE before calling backend.
-- Attach Bearer token for `change-password`.
-- Consider forcing re-login after password change to avoid stale session confusion.
+- FE local cache: optimistic UI and fast rendering.
+- Backend API state: final persisted truth.
 
-## 5) Source of Truth
+After create/update/delete mutations, revalidate from backend (at least list-level).
 
-Frontend may keep local cache for faster rendering, but backend should be the source of truth for:
+## 7) Common Mistakes to Avoid
 
-- conversations
-- messages
-- quizzes
-- study plans
-- progress
+- Using `documentId` as inbox primary key when `conversationId` exists.
+- Assuming local cache delete succeeded without refetch/validation.
+- Sending lesson quiz payload as object instead of array for `/progress/lessons/:lessonId/quiz`.
+- Duplicating endpoint contracts in multiple FE documents without updating all copies.
 
-Recommended rule:
-- Local cache = fallback / optimistic UI
-- Backend = final persisted state
+## 8) Short Operational Checklist
 
-## 6) What to Prefer in New FE Work
-
-Prefer these flows first:
-1. `GET /conversations`
-2. `GET /conversations/:conversationId/messages`
-3. `GET /progress/timeline`
-4. `POST /progress/init`
-5. `POST /progress/complete`
-6. `POST /auth/forgot-password`
-7. `POST /auth/change-password`
-
-## 7) Avoid
-
-- Avoid using `documentId` as the main inbox key when the conversationId API already exists.
-- Avoid showing the same endpoint in multiple docs.
-- Avoid keeping separate lesson guides when lesson APIs already live in the progress guide.
-- Avoid treating local cache as the only source of truth.
-
-## 8) Short Version for FE Team
-
-- Load inbox with `GET /conversations`.
-- Load thread messages with `GET /conversations/:conversationId/messages`.
-- Use `GET /documents/:id/history` only for document detail fallback.
-- Use `GET /progress/timeline` for roadmap UI.
-- Use lesson APIs under progress for saved lesson history and quiz JSON.
-- Use auth password APIs exactly as documented.
+1. Login and store JWT.
+2. Load inbox via `GET /conversations`.
+3. Load messages by `conversationId`.
+4. On delete, call `DELETE /conversations/:conversationId`, then refresh list.
+5. Use progress timeline as roadmap source.
+6. Keep FE docs synced with `FE_API_INDEX.md` first.

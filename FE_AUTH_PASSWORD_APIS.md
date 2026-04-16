@@ -1,29 +1,22 @@
-# FE Integration - Password APIs (Forgot + Change)
+# FE Integration: Password APIs
 
-Canonical endpoint naming and global FE order: [FE_API_INDEX.md](FE_API_INDEX.md)
+Canonical endpoint index: [FE_API_INDEX.md](FE_API_INDEX.md)
 
-Tai lieu nay mo ta 2 API lien quan mat khau de FE tich hop:
+This document covers two password flows:
 
-1. Quen mat khau qua email + phone
-2. Doi mat khau khi da dang nhap
+1. Forgot password with email + phone verification
+2. Change password for authenticated users
 
-## 1) POST /auth/forgot-password
+## 1) Forgot Password
 
-### Muc dich
-Cho phep reset mat khau khi user cung cap dung:
-- email
-- phoneNumber
-- newPassword
-
-Backend se:
-- Xac thuc email + phone
-- Hash mat khau moi va cap nhat vao bang users
-- Luu lich su vao bang password_resets
+Endpoint: `POST /auth/forgot-password`
 
 ### Auth
-Khong can Bearer token.
 
-### Request body
+No Bearer token required.
+
+### Request Body
+
 ```json
 {
   "email": "user@example.com",
@@ -32,32 +25,36 @@ Khong can Bearer token.
 }
 ```
 
-### Success response
+### Success Response
+
 ```json
 {
-  "message": "Đặt lại mật khẩu thành công"
+  "message": "Password reset completed successfully."
 }
 ```
 
-### Error cases
-- 404: Khong tim thay tai khoan voi email nay
-- 400: Tai khoan chua co so dien thoai de xac thuc
-- 401: Email hoac so dien thoai khong chinh xac
+### Error Cases
 
-## 2) POST /auth/change-password
+- 404: account not found by email
+- 400: account exists but has no registered phone number
+- 401: email and phone combination is invalid
 
-### Muc dich
-User da dang nhap co the doi mat khau bang mat khau cu.
+## 2) Change Password
+
+Endpoint: `POST /auth/change-password`
 
 ### Auth
-Bat buoc Bearer token.
+
+Bearer token required.
 
 Header:
+
 ```text
 Authorization: Bearer <access_token>
 ```
 
-### Request body
+### Request Body
+
 ```json
 {
   "oldPassword": "oldPassword123",
@@ -65,31 +62,31 @@ Authorization: Bearer <access_token>
 }
 ```
 
-### Success response
+### Success Response
+
 ```json
 {
-  "message": "Đổi mật khẩu thành công"
+  "message": "Password changed successfully."
 }
 ```
 
-### Error cases
-- 401: Unauthorized (token sai/het han)
-- 401: Mat khau cu khong chinh xac
-- 404: Khong tim thay user
-- 400: Tai khoan khong co mat khau local
+### Error Cases
 
-### Backend notes
-- `POST /auth/login` returns `access_token` and a `user` object with `id`, `email`, `fullName`, and `phoneNumber`.
-- The password change flow does not revoke the current token automatically.
+- 401: token invalid/expired
+- 401: old password is incorrect
+- 404: account not found
+- 400: account has no local password
 
-## 3) Luu y cho FE
+## FE Implementation Notes
 
-- Khong log plaintext password tren app logs.
-- Bat buoc validate password length >= 6 truoc khi goi API.
-- Sau khi doi mat khau thanh cong, FE nen giu token hien tai hoac cho user dang nhap lai theo chinh sach cua app.
-- Neu API tra 401 do token het han, clear token va dieu huong ve man login.
+- Validate password length on FE before calling API.
+- Never log plaintext passwords.
+- If API returns 401 due to token expiration, clear session and redirect to login.
+- Password change does not revoke existing token automatically; FE can choose either:
+  - keep current session, or
+  - force re-login by policy.
 
-## 4) Database lien quan
+## Data Persistence Notes
 
-- users.password: duoc cap nhat sau khi reset/doi mat khau.
-- password_resets: luu lich su reset mat khau theo email + phone va ket qua.
+- `users.password` is updated on success.
+- `password_resets` stores forgot-password attempt history.

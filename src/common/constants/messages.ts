@@ -91,10 +91,13 @@ export const QUIZ_MESSAGES = {
 } as const;
 
 export const BOOT_MESSAGES = {
+  PORT_PREFERENCE: (preferredPort: number) =>
+    `BOOT | preferred port ${preferredPort}`,
   FALLBACK_PORT_IN_USE: (preferredPort: number, candidatePort: number) =>
     `BOOT | fallback port ${candidatePort} in use instead of ${preferredPort}`,
   PORTS_UNAVAILABLE: (preferredPort: number, lastPort: number) =>
     `BOOT | ports ${preferredPort}-${lastPort} unavailable`,
+  ACTIVE_PORT: (activePort: number) => `BOOT | active port ${activePort}`,
   READY: (activePort: number) => `BOOT | ready http://localhost:${activePort}`,
   OLLAMA: (baseUrl: string) => `BOOT | ollama ${baseUrl}`,
   QUANTIZATION: (profile: string) => `BOOT | quantization ${profile}`,

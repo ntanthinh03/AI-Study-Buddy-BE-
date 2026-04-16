@@ -83,6 +83,9 @@ Read these in order:
 4. `FE_PROGRESS_JSON_API_GUIDE.md`
 5. `FE_DELETE_CHAT_ENDPOINT_SYNC.md`
 
+Recommended for handover and implementation consistency:
+- `FE_BE_ALIGNMENT_RECOMMENDATIONS.md`
+
 Short token-upload fix note:
 - Covered in `FE_API_INDEX.md` and `FE_AUTH_PASSWORD_APIS.md`
 

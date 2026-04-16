@@ -1,200 +1,104 @@
-# FE Guide - Progress JSON API (Quiz-like Integration)
+# FE Guide: Progress and Lesson Quiz APIs
 
-Canonical endpoint naming and global FE order: [FE_API_INDEX.md](FE_API_INDEX.md)
+Canonical index: [FE_API_INDEX.md](FE_API_INDEX.md)
 
-This guide helps FE integrate progress flow with clear JSON contracts, similar to quiz integration docs.
+This document describes progress contracts used by roadmap UI and lesson-level quiz persistence.
 
-## 1) Overview
+## 1) Auth Requirement
 
-Progress module provides 4 main APIs:
+All `/progress/*` endpoints require:
 
-1. GET /progress/me
-2. GET /progress/timeline
-3. POST /progress/init
-4. POST /progress/complete
-
-All progress APIs require JWT Bearer token.
-
-Header:
 ```text
 Authorization: Bearer <access_token>
 ```
 
-## 2) Status Model for FE
+## 2) Timeline Status Model
 
-Use this status enum in FE:
+Use these backend statuses directly in FE:
 
-- LOCKED
-- IN_PROGRESS
-- COMPLETED
+- `LOCKED`
+- `IN_PROGRESS`
+- `COMPLETED`
 
-Status is returned directly by `GET /progress/timeline`.
+## 3) Core Progress Endpoints
 
-## 3) API Contracts
+### A) `GET /progress/me`
 
-## A) GET /progress/me
+Raw entity-level progress rows for the current user.
 
-### Purpose
-Get raw progress rows for current user (entity-level data).
+Use case:
 
-### Auth
-Required.
+- Debug/admin-style detail view
 
-### Response example
-```json
-[
-  {
-    "id": "a2f4d5f6-1111-2222-3333-abcdef123456",
-    "userId": "u-123",
-    "isCompleted": false,
-    "isLocked": false,
-    "highestScore": null,
-    "document": {
-      "id": "doc-001",
-      "fileName": "sql-basics.pdf"
-    }
-  }
-]
-```
+### B) `GET /progress/timeline`
 
-### FE use-case
-- Internal debug screen
-- Full detail sync with local cache
+FE-ready roadmap data with simplified fields:
 
-## B) GET /progress/timeline
+- `documentId`
+- `fileName`
+- `status`
+- `score`
 
-### Purpose
-Get FE-ready simplified timeline.
+Use case:
 
-### Auth
-Required.
+- Main roadmap screen
 
-### Response example
-```json
-[
-  {
-    "documentId": "doc-001",
-    "fileName": "sql-basics.pdf",
-    "status": "IN_PROGRESS",
-    "score": 0
-  },
-  {
-    "documentId": "doc-002",
-    "fileName": "joins.pdf",
-    "status": "LOCKED",
-    "score": 0
-  }
-]
-```
+### C) `POST /progress/init`
 
-### FE use-case
-- Main roadmap/timeline UI
-- Module card status badge
+Initializes a progress row for a document.
 
-## C) POST /progress/init
+Request body:
 
-### Purpose
-Initialize progress row when a document/module appears for user.
-
-### Auth
-Required.
-
-### Request body
 ```json
 {
-  "documentId": "doc-001"
+  "documentId": "8f7f4d7a-9f9e-4c97-b1e2-c6f9f5e5b0e1"
 }
 ```
 
-The backend returns the saved progress row for that document.
+### D) `POST /progress/complete`
 
-### Response example
+Marks current module complete and may unlock the next module.
+
+Request body:
+
 ```json
 {
-  "id": "a2f4d5f6-1111-2222-3333-abcdef123456",
-  "userId": "u-123",
-  "isCompleted": false,
-  "isLocked": false,
-  "highestScore": null,
-  "document": {
-    "id": "doc-001"
-  }
-}
-```
-
-Notes:
-- First module for a user is auto-unlocked.
-- Next modules are created as locked.
-
-## D) POST /progress/complete
-
-### Purpose
-Mark current module completed and unlock next module.
-
-### Auth
-Required.
-
-### Request body
-```json
-{
-  "documentId": "doc-001",
+  "documentId": "8f7f4d7a-9f9e-4c97-b1e2-c6f9f5e5b0e1",
   "score": 85
 }
 ```
 
-### Response example
-```json
-{
-  "message": "Current module completed, next module unlocked!",
-  "nextModule": "progress-row-id"
-}
-```
+Success response includes:
 
-Alternative success response:
-```json
-{
-  "message": "Module updated successfully."
-}
-```
+- `message`
+- optional `nextModule`
 
-The backend only includes `nextModule` when a subsequent module exists.
+## 4) Lesson History and Lesson Quiz
 
-## E) Lesson history and lesson quiz
+### A) `POST /progress/lessons`
 
-These endpoints are for saving study lessons and quiz JSON under the current account.
+Create a lesson history entry.
 
-### POST /progress/lessons
+### B) `GET /progress/lessons`
 
-Create and save a lesson for current user.
+List lesson history rows for current user.
 
-Request body:
-```json
-{
-  "documentId": "doc-001",
-  "title": "Lesson 1 - SQL Basics",
-  "contentText": "SQL is used to query relational databases..."
-}
-```
+### C) `GET /progress/lessons/:lessonId`
 
-Response: saved lesson row, including `id`, `userId`, `documentId`, `title`, `contentText`, `quizJson`, `lastStudiedAt`, `createdAt`, and `updatedAt`.
+Get one lesson detail row.
 
-### GET /progress/lessons
+### D) `POST /progress/lessons/:lessonId/quiz`
 
-Get lesson history list for current user only.
+Save or overwrite quiz JSON for a lesson.
 
-Response: array of saved lesson rows ordered by `updatedAt` descending.
+Critical payload rule:
 
-### GET /progress/lessons/:lessonId
+- `quiz` must be a non-empty array.
+- Sending `quiz` as an object causes 400 validation error.
+- `documentId` for progress init/complete must be a valid UUID.
 
-Get lesson detail, including saved quiz JSON, for the current user.
+Valid request example:
 
-Response: one saved lesson row.
-
-### POST /progress/lessons/:lessonId/quiz
-
-Save or overwrite quiz JSON for one lesson.
-
-Request body:
 ```json
 {
   "quiz": [
@@ -213,70 +117,23 @@ Request body:
 }
 ```
 
-Response example:
-```json
-{
-  "message": "Lesson quiz saved successfully",
-  "lessonId": "lesson-uuid",
-  "quizCount": 1
-}
-```
+## 5) Recommended FE Flow
 
-## 4) FE Integration Flow (Recommended)
+1. On document/module availability, call `POST /progress/init`.
+2. Load roadmap using `GET /progress/timeline`.
+3. After quiz submission, call `POST /progress/complete`.
+4. Refresh `GET /progress/timeline`.
+5. Persist lesson quiz history with `POST /progress/lessons/:lessonId/quiz`.
 
-1. User uploads/opens a new document.
-2. FE calls `POST /progress/init` with documentId.
-3. FE calls `GET /progress/timeline` to render roadmap.
-4. User finishes quiz.
-5. FE calls `POST /progress/complete` with `{ documentId, score }`.
-6. FE refreshes `GET /progress/timeline`.
+## 6) Error Handling
 
-## 5) FE JSON Models (Example)
+- 401: token missing/expired/invalid
+- 400: invalid body (for example wrong quiz payload shape)
+- 404: document or lesson not found
 
-```kotlin
-enum class ProgressStatus { LOCKED, IN_PROGRESS, COMPLETED }
+## 7) FE Completion Checklist
 
-data class ProgressTimelineItem(
-    val documentId: String,
-    val fileName: String,
-    val status: ProgressStatus,
-    val score: Double
-)
-
-data class InitProgressRequest(
-    val documentId: String
-)
-
-data class CompleteProgressRequest(
-    val documentId: String,
-    val score: Double
-)
-```
-
-## 6) Error Handling Checklist
-
-- 401 Unauthorized:
-  - Token missing/expired/invalid
-  - FE should clear token and redirect to login
-- 400 Bad Request:
-  - Invalid request body (missing documentId/score)
-- 404 Not Found:
-  - Document may not exist
-
-## 7) FE API Check Checklist
-
-- [ ] JWT token attached to all `/progress/*` requests
-- [ ] `POST /progress/init` called after new module/document is available
-- [ ] `POST /progress/complete` called after quiz submission
-- [ ] `GET /progress/timeline` re-fetched after complete
-- [ ] UI status mapped exactly: LOCKED, IN_PROGRESS, COMPLETED
-- [ ] Score rendered from `timeline.score`
-
-## 8) Definition of Done
-
-- FE can initialize progress for a document
-- FE can show roadmap timeline from backend JSON
-- FE can complete module with score
-- FE can show next module unlocked after refresh
-- FE handles auth failure safely
-- FE can save and reopen lesson history with quiz JSON
+- [ ] Attach JWT to all `/progress/*` requests.
+- [ ] Map timeline status values without local remapping.
+- [ ] Always send lesson `quiz` as array.
+- [ ] Refetch timeline after completion updates.

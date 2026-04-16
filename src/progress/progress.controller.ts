@@ -11,6 +11,8 @@ import { AuthGuard } from '@nestjs/passport';
 import { ProgressService } from './progress.service';
 import { SaveLessonDto } from './dto/save-lesson.dto';
 import { SaveLessonQuizDto } from './dto/save-lesson-quiz.dto';
+import { InitProgressDto } from './dto/init-progress.dto';
+import { CompleteProgressDto } from './dto/complete-progress.dto';
 import type { AuthenticatedRequest } from '../common/types/authenticated-request.type';
 
 @Controller('progress')
@@ -43,7 +45,7 @@ export class ProgressController {
 
   @Post('init')
   async initProgress(
-    @Body() data: { documentId: string },
+    @Body() data: InitProgressDto,
     @Request() req: AuthenticatedRequest,
   ) {
     const userId = req.user.userId;
@@ -55,7 +57,7 @@ export class ProgressController {
 
   @Post('complete')
   async completeModule(
-    @Body() data: { documentId: string; score: number },
+    @Body() data: CompleteProgressDto,
     @Request() req: AuthenticatedRequest,
   ) {
     const userId = req.user.userId;
