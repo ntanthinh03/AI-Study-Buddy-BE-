@@ -460,7 +460,8 @@ export class AIService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-            content: AI_PROMPTS.STUDY_PLAN_SYSTEM,
+        model,
+        messages,
         stream: false,
       }),
     });

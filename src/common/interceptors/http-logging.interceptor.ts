@@ -1,6 +1,7 @@
 import {
   CallHandler,
   ExecutionContext,
+  HttpException,
   Injectable,
   Logger,
   NestInterceptor,
@@ -44,8 +45,12 @@ export class HttpLoggingInterceptor implements NestInterceptor {
           const duration = Date.now() - startedAt;
           const message =
             error instanceof Error ? error.message : 'Unknown error';
+          const status =
+            error instanceof HttpException
+              ? error.getStatus()
+              : response.statusCode;
           this.logger.error(
-            `ERROR ${method} ${originalUrl} | status=${response.statusCode} | duration=${duration}ms | message=${message}`,
+            `ERROR ${method} ${originalUrl} | status=${status} | duration=${duration}ms | message=${message}`,
           );
         },
       }),
@@ -88,6 +93,7 @@ export class HttpLoggingInterceptor implements NestInterceptor {
       return summary;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-base-to-string
     return String(value);
   }
 

@@ -10,7 +10,7 @@ import { QuizzesModule } from './quizzes/quizzes.module';
 import { ProgressModule } from './progress/progress.module';
 import { ChatModule } from './chat/chat.module';
 import { RagModule } from './modules/rag/rag.module';
-import { AiModule } from './modules/ai/rag.module';
+import { AiModule } from './modules/ai/ai.module';
 
 @Module({
   imports: [

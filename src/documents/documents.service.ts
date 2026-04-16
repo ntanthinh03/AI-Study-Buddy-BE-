@@ -509,7 +509,12 @@ export class DocumentsService {
     if (doc.filePath && fs.existsSync(doc.filePath)) {
       try {
         fs.unlinkSync(doc.filePath);
-      } catch {
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : 'Unknown error';
+        this.logger.warn(
+          `DOC | unable to delete local file ${doc.filePath}: ${message}`,
+        );
       }
     }
 
