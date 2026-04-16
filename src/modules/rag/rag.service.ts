@@ -9,6 +9,9 @@ import { MemoryVectorStore } from '@langchain/classic/vectorstores/memory';
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import { Document } from '@langchain/core/documents';
 import { PDFParse } from 'pdf-parse';
+import { normalizeOllamaBaseUrl } from '../../common/config/ollama.config';
+import { RAG_MESSAGES } from '../../common/constants/messages';
+import { AI_PROMPTS } from '../../common/constants/ai-prompts';
 
 type RagMetadata = { source?: string };
 type RagDocument = Document<RagMetadata>;
@@ -22,14 +25,14 @@ interface VectorStoreLike {
 export class RagService {
   private readonly logger = new Logger(RagService.name);
   private memoryVectorStore: MemoryVectorStore | null = null;
-  private readonly ollamaBaseUrl = (
-    process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434'
-  ).replace(/\/$/, '');
+  private readonly ollamaBaseUrl = normalizeOllamaBaseUrl(
+    process.env.OLLAMA_BASE_URL,
+  );
   private readonly ollamaVisionModel =
     process.env.OLLAMA_VISION_MODEL ?? 'llama3.2-vision:11b';
 
   private model = new Ollama({
-    baseUrl: 'http://localhost:11434',
+    baseUrl: normalizeOllamaBaseUrl(process.env.OLLAMA_BASE_URL),
     model: 'phi3:medium-128k',
     temperature: 0.3,
   });
@@ -58,9 +61,7 @@ export class RagService {
 
       if (!this.memoryVectorStore) {
         this.memoryVectorStore = new MemoryVectorStore(this.embeddings);
-        this.logger.warn(
-          'pgvector extension is unavailable. Falling back to in-memory vector store (non-persistent).',
-        );
+        this.logger.warn(RAG_MESSAGES.PGVECTOR_UNAVAILABLE);
       }
 
       return this.memoryVectorStore as unknown as VectorStoreLike;
@@ -103,13 +104,11 @@ export class RagService {
         messages: [
           {
             role: 'system',
-            content:
-              'You are an OCR assistant. Extract text from images accurately and return plain text only in English.',
+            content: AI_PROMPTS.OCR_SYSTEM,
           },
           {
             role: 'user',
-            content:
-              'Extract all readable text from this image. Return plain text only, no markdown, no JSON.',
+            content: AI_PROMPTS.OCR_USER,
             images: [imageBase64],
           },
         ],
@@ -186,13 +185,13 @@ export class RagService {
         ],
       };
     } catch {
-      throw new InternalServerErrorException('AI processing failed.');
+      throw new InternalServerErrorException(RAG_MESSAGES.AI_PROCESSING_FAILED);
     }
   }
   async saveKnowledge(text: string, source: string) {
     try {
       if (!text || text.trim().length === 0) {
-        throw new Error('Input text is empty');
+        throw new Error(RAG_MESSAGES.INPUT_TEXT_EMPTY);
       }
 
       const splitter = new RecursiveCharacterTextSplitter({
@@ -215,20 +214,20 @@ export class RagService {
       return { success: true, chunks: docs.length };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`RAG text ingestion failed: ${message}`);
-      throw new InternalServerErrorException('Text ingestion failed.');
+      this.logger.error(`RAG | text ingest failed: ${message}`);
+      throw new InternalServerErrorException(RAG_MESSAGES.TEXT_INGESTION_FAILED);
     }
   }
   async processPdf(fileBuffer: Buffer, fileName: string) {
     try {
       if (!fileBuffer || fileBuffer.length === 0) {
-        throw new Error('Uploaded PDF buffer is empty');
+        throw new Error(RAG_MESSAGES.UPLOADED_PDF_BUFFER_EMPTY);
       }
 
       const data = await this.parsePdfBuffer(fileBuffer);
       const extractedText = (data?.text ?? '').trim();
       if (!extractedText) {
-        throw new Error('No extractable text found in PDF');
+        throw new Error(RAG_MESSAGES.NO_EXTRACTABLE_TEXT_IN_PDF);
       }
 
       const splitter = new RecursiveCharacterTextSplitter({
@@ -251,31 +250,31 @@ export class RagService {
       return { success: true, chunks: docs.length };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`RAG PDF ingestion failed (${fileName}): ${message}`);
-      throw new InternalServerErrorException('Ingestion failed.');
+      this.logger.error(`RAG | pdf ingest failed ${fileName}: ${message}`);
+      throw new InternalServerErrorException(RAG_MESSAGES.PDF_INGESTION_FAILED);
     }
   }
 
   async processImage(fileBuffer: Buffer, fileName: string, mimeType: string) {
     try {
       if (!mimeType.startsWith('image/')) {
-        throw new Error('Invalid image mime type');
+        throw new Error(RAG_MESSAGES.INVALID_IMAGE_MIME_TYPE);
       }
 
       if (!fileBuffer || fileBuffer.length === 0) {
-        throw new Error('Uploaded image buffer is empty');
+        throw new Error(RAG_MESSAGES.UPLOADED_IMAGE_BUFFER_EMPTY);
       }
 
       const extractedText = await this.extractImageText(fileBuffer);
       if (!extractedText) {
-        throw new Error('No extractable text found in image');
+        throw new Error(RAG_MESSAGES.NO_EXTRACTABLE_TEXT_IN_IMAGE);
       }
 
       return await this.saveKnowledge(extractedText, fileName);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`RAG image ingestion failed (${fileName}): ${message}`);
-      throw new InternalServerErrorException('Image ingestion failed.');
+      this.logger.error(`RAG | image ingest failed ${fileName}: ${message}`);
+      throw new InternalServerErrorException(RAG_MESSAGES.IMAGE_INGESTION_FAILED);
     }
   }
 }

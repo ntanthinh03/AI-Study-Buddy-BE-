@@ -33,6 +33,20 @@ export class ChatMessage {
   @Column({ name: 'artifact_json', type: 'jsonb', nullable: true })
   artifactJson!: unknown;
 
+  @Column({
+    name: 'image_data',
+    type: 'bytea',
+    nullable: true,
+    select: false,
+  })
+  imageData!: Buffer | null;
+
+  @Column({ name: 'image_mime_type', type: 'text', nullable: true })
+  imageMimeType!: string | null;
+
+  @Column({ name: 'image_original_name', type: 'text', nullable: true })
+  imageOriginalName!: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 
@@ -40,9 +54,9 @@ export class ChatMessage {
   @JoinColumn({ name: 'user_id' })
   user!: User;
 
-  @ManyToOne(() => Document)
+  @ManyToOne(() => Document, { nullable: true })
   @JoinColumn({ name: 'document_id' })
-  document!: Document;
+  document!: Document | null;
 
   @ManyToOne(() => Conversation, (conversation) => conversation.messages, {
     onDelete: 'CASCADE',

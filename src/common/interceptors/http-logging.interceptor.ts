@@ -18,7 +18,7 @@ type LoggedRequest = Request<
 
 @Injectable()
 export class HttpLoggingInterceptor implements NestInterceptor {
-  private readonly logger = new Logger('HTTP');
+  private readonly logger = new Logger(HttpLoggingInterceptor.name);
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const http = context.switchToHttp();
@@ -29,7 +29,7 @@ export class HttpLoggingInterceptor implements NestInterceptor {
     const startedAt = Date.now();
 
     this.logger.log(
-      `REQUEST ${method} ${originalUrl} | body=${JSON.stringify(this.sanitize(body))} | query=${JSON.stringify(query)} | params=${JSON.stringify(params)}`,
+      `REQUEST ${method} ${originalUrl} | payload=${JSON.stringify(this.summarize({ body, query, params }))}`,
     );
 
     return next.handle().pipe(
@@ -37,7 +37,7 @@ export class HttpLoggingInterceptor implements NestInterceptor {
         next: (data) => {
           const duration = Date.now() - startedAt;
           this.logger.log(
-            `RESPONSE ${method} ${originalUrl} | status=${response.statusCode} | ${duration}ms | data=${JSON.stringify(this.sanitize(data))}`,
+            `RESPONSE ${method} ${originalUrl} | status=${response.statusCode} | duration=${duration}ms | data=${JSON.stringify(this.summarize(data))}`,
           );
         },
         error: (error: unknown) => {
@@ -45,23 +45,69 @@ export class HttpLoggingInterceptor implements NestInterceptor {
           const message =
             error instanceof Error ? error.message : 'Unknown error';
           this.logger.error(
-            `ERROR ${method} ${originalUrl} | status=${response.statusCode} | ${duration}ms | message=${message}`,
+            `ERROR ${method} ${originalUrl} | status=${response.statusCode} | duration=${duration}ms | message=${message}`,
           );
         },
       }),
     );
   }
 
-  private sanitize(value: unknown): unknown {
-    if (!value || typeof value !== 'object') return value;
-
-    const clone = JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
-    const secretKeys = ['password', 'access_token', 'token'];
-
-    for (const key of secretKeys) {
-      if (key in clone) clone[key] = '***';
+  private summarize(value: unknown, depth = 1): unknown {
+    if (value === null || value === undefined) {
+      return value;
     }
 
-    return clone;
+    if (typeof value === 'string') {
+      return this.truncate(value, 160);
+    }
+
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return value;
+    }
+
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+
+    if (Array.isArray(value)) {
+      return {
+        kind: 'array',
+        length: value.length,
+        sample: depth > 0 ? value.slice(0, 3).map((item) => this.summarize(item, depth - 1)) : [],
+      };
+    }
+
+    if (typeof value === 'object') {
+      const entries = Object.entries(value as Record<string, unknown>);
+      const summary: Record<string, unknown> = {};
+
+      for (const [key, entryValue] of entries.slice(0, 8)) {
+        summary[key] = depth > 0 ? this.summarize(entryValue, depth - 1) : this.describe(entryValue);
+      }
+
+      return summary;
+    }
+
+    return String(value);
+  }
+
+  private describe(value: unknown): string {
+    if (value === null || value === undefined) {
+      return String(value);
+    }
+
+    if (Array.isArray(value)) {
+      return `array(${value.length})`;
+    }
+
+    if (typeof value === 'object') {
+      return 'object';
+    }
+
+    return typeof value;
+  }
+
+  private truncate(value: string, maxLength: number): string {
+    return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
   }
 }

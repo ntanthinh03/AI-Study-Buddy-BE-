@@ -22,8 +22,8 @@ export class Conversation {
   @Column({ name: 'user_id' })
   userId!: string;
 
-  @Column({ name: 'document_id' })
-  documentId!: string;
+  @Column({ name: 'document_id', type: 'text', nullable: true })
+  documentId!: string | null;
 
   @Column({ name: 'title' })
   title!: string;
@@ -50,9 +50,9 @@ export class Conversation {
   @JoinColumn({ name: 'user_id' })
   user!: User;
 
-  @ManyToOne(() => Document, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Document, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'document_id' })
-  document!: Document;
+  document!: Document | null;
 
   @OneToMany(() => ChatMessage, (message) => message.conversation)
   messages!: ChatMessage[];

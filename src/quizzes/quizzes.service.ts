@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Quiz } from './entities/quiz.entity';
 import { DocumentsService } from '../documents/documents.service';
 import { AIService, type QuizQuestion } from '../documents/ai.service';
+import { QUIZ_MESSAGES } from '../common/constants/messages';
 
 @Injectable()
 export class QuizzesService {
@@ -18,15 +19,15 @@ export class QuizzesService {
     const document = await this.documentsService.findOne(documentId, userId);
 
     if (!document) {
-      throw new Error('Document not found.');
+      throw new Error(QUIZ_MESSAGES.DOCUMENT_NOT_FOUND);
     }
 
     if (document.status === 'PROCESSING') {
-      throw new Error('AI is still processing the document.');
+      throw new Error(QUIZ_MESSAGES.DOCUMENT_STILL_PROCESSING);
     }
 
     if (!document.contentText || document.contentText.trim().length === 0) {
-      throw new Error('The document does not contain extractable text.');
+      throw new Error(QUIZ_MESSAGES.DOCUMENT_NO_EXTRACTABLE_TEXT);
     }
 
     const questions = await this.aiService.generateQuiz(document.contentText);

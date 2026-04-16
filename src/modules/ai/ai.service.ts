@@ -1,6 +1,8 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { Ollama } from '@langchain/ollama';
 import { RagService } from '../rag/rag.service';
+import { AI_MESSAGES } from '../../common/constants/messages';
+import { normalizeOllamaBaseUrl } from '../../common/config/ollama.config';
 
 interface OllamaLike {
   invoke(prompt: string): Promise<unknown>;
@@ -9,7 +11,7 @@ interface OllamaLike {
 @Injectable()
 export class AiService {
   private readonly model: OllamaLike = new Ollama({
-    baseUrl: 'http://localhost:11434',
+    baseUrl: normalizeOllamaBaseUrl(process.env.OLLAMA_BASE_URL),
     model: 'phi3:medium-128k',
     temperature: 0.3,
     repeatPenalty: 1.1,
@@ -42,7 +44,7 @@ export class AiService {
         sources: sources,
       };
     } catch {
-      throw new InternalServerErrorException('Generation process failed.');
+      throw new InternalServerErrorException(AI_MESSAGES.GENERATION_FAILED);
     }
   }
 
@@ -70,10 +72,6 @@ export class AiService {
 
     if (response === null || response === undefined) {
       return '';
-    }
-
-    if (typeof response === 'string') {
-      return response.trim();
     }
 
     if (

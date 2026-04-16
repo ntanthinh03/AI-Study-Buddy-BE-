@@ -17,6 +17,7 @@ import { DocumentsService } from './documents.service';
 import { AIService } from './ai.service';
 import type { UploadedFile as UploadedPdfFile } from '../common/types/uploaded-file.type';
 import type { AuthenticatedRequest } from '../common/types/authenticated-request.type';
+import { DOCUMENT_MESSAGES } from '../common/constants/messages';
 
 @Controller('documents')
 @UseGuards(AuthGuard('jwt'))
@@ -60,7 +61,7 @@ export class DocumentsController {
 
     if (!doc.contentText || doc.contentText.trim().length === 0) {
       throw new BadRequestException(
-        'Tai lieu chua san sang de chat. Vui long doi xu ly xong.',
+        DOCUMENT_MESSAGES.DOCUMENT_NOT_READY_FOR_CHAT,
       );
     }
 
@@ -88,7 +89,7 @@ export class DocumentsController {
     const userId = req.user.userId;
 
     if (!body?.artifactType || !body?.artifact) {
-      throw new BadRequestException('artifactType and artifact are required');
+      throw new BadRequestException(DOCUMENT_MESSAGES.ARTIFACT_REQUIRED);
     }
 
     await this.documentsService.findOne(id, userId);

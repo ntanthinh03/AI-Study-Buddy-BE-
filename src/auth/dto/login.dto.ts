@@ -1,11 +1,14 @@
 import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import { AUTH_VALIDATION_MESSAGES } from '../../common/constants/messages';
 
 export class LoginDto {
-  @IsEmail({}, { message: 'The email address is invalid.' })
+  @IsEmail({}, { message: AUTH_VALIDATION_MESSAGES.EMAIL_INVALID })
   @IsNotEmpty()
   email!: string;
 
   @IsString()
-  @MinLength(6, { message: 'The password must be at least 6 characters long.' })
+  @MinLength(6, {
+    message: AUTH_VALIDATION_MESSAGES.PASSWORD_MIN_LENGTH,
+  })
   password!: string;
 }

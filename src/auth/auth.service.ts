@@ -16,6 +16,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PasswordReset } from './entities/password-reset.entity';
 import { User } from '../users/entities/user.entity';
+import { AUTH_MESSAGES } from '../common/constants/messages';
 
 @Injectable()
 export class AuthService {
@@ -30,7 +31,11 @@ export class AuthService {
   async register(dto: RegisterDto) {
     const userExists = await this.usersService.findByEmail(dto.email);
     if (userExists) {
-      throw new BadRequestException('This email address is already in use.');
+      throw new BadRequestException(AUTH_MESSAGES.EMAIL_IN_USE);
+    }
+
+    if (!dto.phoneNumber || !dto.phoneNumber.trim()) {
+      throw new BadRequestException(AUTH_MESSAGES.PHONE_REQUIRED);
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
@@ -49,13 +54,13 @@ export class AuthService {
     const user = await this.usersService.findByEmail(email);
 
     if (!user) {
-      throw new UnauthorizedException('The email address does not exist.');
+      throw new UnauthorizedException(AUTH_MESSAGES.EMAIL_NOT_FOUND);
     }
 
     const isPasswordMatching = await bcrypt.compare(password, user.password);
 
     if (!isPasswordMatching) {
-      throw new UnauthorizedException('The password is incorrect.');
+      throw new UnauthorizedException(AUTH_MESSAGES.PASSWORD_INCORRECT);
     }
 
     return this.generateTokens(user);
@@ -82,7 +87,7 @@ export class AuthService {
   async forgotPassword(dto: ForgotPasswordDto) {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) {
-      throw new NotFoundException('No account was found for this email address.');
+      throw new NotFoundException(AUTH_MESSAGES.ACCOUNT_NOT_FOUND_FOR_EMAIL);
     }
 
     if (!user.phoneNumber) {
@@ -93,7 +98,7 @@ export class AuthService {
         isSuccessful: false,
         reason: 'User has no phone number',
       });
-      throw new BadRequestException('The account does not have a phone number for verification.');
+      throw new BadRequestException(AUTH_MESSAGES.REGISTERED_PHONE_REQUIRED);
     }
 
     const normalizedPhone = this.normalizePhone(user.phoneNumber);
@@ -107,7 +112,7 @@ export class AuthService {
         isSuccessful: false,
         reason: 'Phone mismatch',
       });
-      throw new UnauthorizedException('The email address or phone number is incorrect.');
+      throw new UnauthorizedException(AUTH_MESSAGES.EMAIL_OR_PHONE_INCORRECT);
     }
 
     const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
@@ -121,21 +126,21 @@ export class AuthService {
       reason: 'Password reset success',
     });
 
-    return { message: 'Password reset completed successfully.' };
+    return { message: AUTH_MESSAGES.PASSWORD_RESET_COMPLETED };
   }
 
   async changePassword(email: string, dto: ChangePasswordDto) {
     if (!email) {
-      throw new UnauthorizedException('Unauthorized');
+      throw new UnauthorizedException(AUTH_MESSAGES.AUTHENTICATION_REQUIRED);
     }
 
     const user = await this.usersService.findByEmail(email);
     if (!user) {
-      throw new NotFoundException('No account was found.');
+      throw new NotFoundException(AUTH_MESSAGES.NO_ACCOUNT_FOUND);
     }
 
     if (!user.password) {
-      throw new BadRequestException('The account does not use a local password.');
+      throw new BadRequestException(AUTH_MESSAGES.LOCAL_PASSWORD_REQUIRED);
     }
 
     const isOldPasswordMatching = await bcrypt.compare(
@@ -143,13 +148,13 @@ export class AuthService {
       user.password,
     );
     if (!isOldPasswordMatching) {
-      throw new UnauthorizedException('The current password is incorrect.');
+      throw new UnauthorizedException(AUTH_MESSAGES.CURRENT_PASSWORD_INCORRECT);
     }
 
     const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
     await this.usersService.updatePassword(user.id, hashedPassword);
 
-    return { message: 'Password changed successfully.' };
+    return { message: AUTH_MESSAGES.PASSWORD_CHANGED };
   }
 
   private normalizePhone(phone: string) {

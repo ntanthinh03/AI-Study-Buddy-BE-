@@ -5,6 +5,7 @@ import { UserProgress } from './entities/user-progress.entity';
 import { Document } from '../documents/entities/document.entity';
 import { LearningLesson } from './entities/learning-lesson.entity';
 import { SaveLessonDto } from './dto/save-lesson.dto';
+import { PROGRESS_MESSAGES } from '../common/constants/messages';
 
 @Injectable()
 export class ProgressService {
@@ -73,13 +74,13 @@ export class ProgressService {
         nextProgress.isLocked = false;
         await this.progressRepository.save(nextProgress);
         return {
-          message: 'Current module completed, next module unlocked!',
+          message: PROGRESS_MESSAGES.NEXT_MODULE_UNLOCKED,
           nextModule: nextProgress.id,
         };
       }
     }
 
-    return { message: 'Module updated successfully.' };
+    return { message: PROGRESS_MESSAGES.MODULE_UPDATED };
   }
 
   async saveLesson(userId: string, dto: SaveLessonDto) {
@@ -107,7 +108,7 @@ export class ProgressService {
     });
 
     if (!lesson) {
-      throw new NotFoundException('Lesson not found');
+      throw new NotFoundException(PROGRESS_MESSAGES.LESSON_NOT_FOUND);
     }
 
     return lesson;
@@ -119,7 +120,7 @@ export class ProgressService {
     });
 
     if (!lesson) {
-      throw new NotFoundException('Lesson not found');
+      throw new NotFoundException(PROGRESS_MESSAGES.LESSON_NOT_FOUND);
     }
 
     lesson.quizJson = quiz;
@@ -127,7 +128,7 @@ export class ProgressService {
     await this.lessonRepository.save(lesson);
 
     return {
-      message: 'Lesson quiz saved successfully',
+      message: PROGRESS_MESSAGES.LESSON_QUIZ_SAVED,
       lessonId: lesson.id,
       quizCount: Array.isArray(quiz) ? quiz.length : 0,
     };

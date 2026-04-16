@@ -1,5 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { normalizeOllamaBaseUrl } from '../common/config/ollama.config';
+import { AI_MESSAGES } from '../common/constants/messages';
+import { AI_PROMPTS } from '../common/constants/ai-prompts';
 
 export interface QuizQuestion {
   question: string;
@@ -55,10 +58,9 @@ export class AIService {
   private readonly visionModel: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.baseUrl = (
-      this.configService.get<string>('OLLAMA_BASE_URL') ??
-      'http://localhost:11434'
-    ).replace(/\/$/, '');
+    this.baseUrl = normalizeOllamaBaseUrl(
+      this.configService.get<string>('OLLAMA_BASE_URL'),
+    );
     this.textModel =
       this.configService.get<string>('OLLAMA_TEXT_MODEL') ??
       'qwen2.5:14b-instruct';
@@ -70,41 +72,39 @@ export class AIService {
   }
 
   async generateSummary(text: string): Promise<string> {
-    const prompt = `You are an intelligent study assistant. Summarize the following content clearly, accurately, and concisely for a student. Output strictly in English.\n\nContent:\n${text.substring(0, 15000)}`;
+    const prompt = AI_PROMPTS.SUMMARY_USER(text);
 
     try {
       return await this.chat(this.textModel, [
         {
           role: 'system',
-          content:
-            'You are a precise academic assistant that always answers in English.',
+          content: AI_PROMPTS.SUMMARY_SYSTEM,
         },
         { role: 'user', content: prompt },
       ]);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`❌ Local summary failed: ${message}`);
-      throw new Error(`Local summary failed: ${message}`);
+      this.logger.error(`AI | summary failed: ${message}`);
+      throw new Error(`${AI_MESSAGES.SUMMARY_FAILED}${message}`);
     }
   }
 
   async chatWithDocument(text: string, question: string): Promise<string> {
     const context = text.substring(0, 20000);
-    const prompt = `Based on the document content below, answer the user's question clearly, accurately, and in English only. If the answer is not in the document, say you cannot find it in the document and then give a brief general explanation if helpful.\n\nDocument content:\n${context}\n\nUser question: ${question}`;
+    const prompt = AI_PROMPTS.CHAT_USER(context, question);
 
     try {
       return await this.chat(this.textModel, [
         {
           role: 'system',
-          content:
-            'You are Buddy, a concise study assistant. Always respond in English.',
+          content: AI_PROMPTS.CHAT_SYSTEM,
         },
         { role: 'user', content: prompt },
       ]);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`❌ Local chat failed: ${message}`);
-      throw new Error('Could not connect to the local AI model for chat.');
+      this.logger.error(`AI | chat failed: ${message}`);
+      throw new Error(AI_MESSAGES.CHAT_FAILED);
     }
   }
 
@@ -113,35 +113,13 @@ export class AIService {
     mimeType: string,
   ): Promise<{ extractedText: string; summary: string }> {
     const imageBase64 = imageBuffer.toString('base64');
-    const prompt = `You are an OCR + study-note assistant for academic documents.
-
-Task:
-1) Read the image and extract study-relevant content as accurately as possible.
-2) Return ONLY valid JSON (no markdown, no code fences, no extra text).
-
-Output JSON schema (exactly these keys):
-{
-  "extractedText": "...",
-  "summary": "..."
-}
-
-Rules:
-- Output must be strictly in English.
-- Keep math formulas readable using plain text math notation.
-- Preserve key terms, headings, bullet points, and definitions when visible.
-- If text is partially unreadable, keep high-confidence text and avoid hallucination.
-- "extractedText" should be a clean OCR reconstruction (multi-line allowed).
-- "summary" should be concise, factual, and optimized for student review.
-- If image quality is low, say that briefly in summary but still provide best effort extraction.`;
-
-    const promptWithMimeType = `${prompt}\n\nInput image MIME type: ${mimeType}`;
+    const promptWithMimeType = AI_PROMPTS.IMAGE_ANALYSIS_USER(mimeType);
 
     try {
       const rawText = await this.chat(this.visionModel, [
         {
           role: 'system',
-          content:
-            'You are a vision model for academic note processing. Always respond in English.',
+          content: AI_PROMPTS.IMAGE_ANALYSIS_SYSTEM,
         },
         {
           role: 'user',
@@ -164,44 +142,20 @@ Rules:
       return { extractedText, summary };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`❌ Local image analysis failed: ${message}`);
-      throw new Error(`Local image analysis failed: ${message}`);
+      this.logger.error(`AI | image analysis failed: ${message}`);
+      throw new Error(`${AI_MESSAGES.IMAGE_ANALYSIS_FAILED}${message}`);
     }
   }
 
   async generateQuiz(text: string): Promise<QuizQuestion[]> {
     const context = text.substring(0, 15000);
-    const prompt = `Based only on the source content below, generate exactly 5 multiple-choice questions in academic English.
-
-STRICT RULES:
-- Return only a valid JSON array.
-- No markdown, no code fences, no extra text.
-- Each question must test meaningful understanding, not trivial wording.
-- Exactly 4 options: A, B, C, D.
-- Exactly one correct answer key in correctAnswer.
-- correctAnswer must match the truly correct option based on the source.
-- explanation must briefly justify why the correct option is right and why common confusion may happen.
-- Avoid ambiguous, trick, or logically inconsistent questions.
-
-Required format:
-[
-  {
-    "question": "...",
-    "options": { "A": "...", "B": "...", "C": "...", "D": "..." },
-    "correctAnswer": "A",
-    "explanation": "..."
-  }
-]
-
-Source content:
-${context}`;
+    const prompt = AI_PROMPTS.QUIZ_USER(context);
 
     try {
       const rawText = await this.chat(this.quizModel, [
         {
           role: 'system',
-          content:
-            'You create factually correct and logically consistent study quizzes. Always respond in English.',
+          content: AI_PROMPTS.QUIZ_SYSTEM,
         },
         { role: 'user', content: prompt },
       ]);
@@ -215,14 +169,14 @@ ${context}`;
       );
 
       if (reviewedQuestions.length === 0) {
-        throw new Error('Quiz generation returned no valid questions');
+        throw new Error(AI_MESSAGES.QUIZ_OUTPUT_NOT_ARRAY);
       }
 
       return reviewedQuestions.slice(0, 5);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`❌ Local quiz generation failed: ${message}`);
-      throw new Error(`Local quiz generation failed: ${message}`);
+      this.logger.error(`AI | quiz generation failed: ${message}`);
+      throw new Error(`${AI_MESSAGES.QUIZ_GENERATION_FAILED}${message}`);
     }
   }
 
@@ -232,46 +186,12 @@ ${context}`;
     fileName: string,
   ): Promise<StudyPlan> {
     const context = text.substring(0, 15000);
-    const prompt = `Create a study plan in valid JSON only.
-Schema:
-{
-  "planId": "string",
-  "title": "string",
-  "overview": "string",
-  "estimatedTotalMinutes": 0,
-  "modules": [
-    {
-      "moduleId": "string",
-      "order": 1,
-      "documentId": "${documentId}",
-      "title": "string",
-      "objective": "string",
-      "estimatedMinutes": 0,
-      "difficulty": "BEGINNER|INTERMEDIATE|ADVANCED",
-      "status": "LOCKED|IN_PROGRESS|COMPLETED",
-      "quiz": {
-        "recommendedQuestionCount": 5,
-        "passScore": 70
-      }
-    }
-  ]
-}
-Rules:
-- Output English only.
-- No markdown.
-- No code fences.
-- No extra text outside JSON.
-- Use documentId exactly as provided.
-- First module should be IN_PROGRESS, remaining modules should be LOCKED.
-
-Source content:
-${context}`;
+    const prompt = AI_PROMPTS.STUDY_PLAN_USER(context, documentId);
 
     const rawText = await this.chat(this.textModel, [
       {
         role: 'system',
-        content:
-          'You generate strict JSON study plans for learners. Always respond in English.',
+        content: AI_PROMPTS.STUDY_PLAN_SYSTEM,
       },
       { role: 'user', content: prompt },
     ]);
@@ -422,27 +342,15 @@ ${context}`;
       return [];
     }
 
-    const prompt = `You are a strict quiz reviewer.
-
-Task:
-- Review the questions below against the source content.
-- Fix any logical or factual mistakes.
-- Ensure each question has one correct answer only.
-- Keep exactly 5 items when possible.
-- Keep the same JSON schema.
-- Return only a valid JSON array and nothing else.
-
-Source content:
-${context}
-
-Questions to review:
-${JSON.stringify(questions)}`;
+    const prompt = AI_PROMPTS.QUIZ_REVIEW_USER(
+      context,
+      JSON.stringify(questions),
+    );
 
     const reviewedRaw = await this.chat(this.quizModel, [
       {
         role: 'system',
-        content:
-          'You review and correct quiz quality with strict factual consistency.',
+        content: AI_PROMPTS.QUIZ_REVIEW_SYSTEM,
       },
       { role: 'user', content: prompt },
     ]);
@@ -455,12 +363,12 @@ ${JSON.stringify(questions)}`;
   private extractJsonArray(rawText: string): unknown[] {
     const jsonMatch = rawText.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
-      throw new Error('No JSON array found in AI response');
+      throw new Error(AI_MESSAGES.NO_JSON_ARRAY);
     }
 
     const parsed = JSON.parse(jsonMatch[0]) as unknown;
     if (!Array.isArray(parsed)) {
-      throw new Error('Quiz output is not a valid array');
+      throw new Error(AI_MESSAGES.QUIZ_OUTPUT_NOT_ARRAY);
     }
 
     return parsed;
@@ -552,8 +460,7 @@ ${JSON.stringify(questions)}`;
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model,
-        messages,
+            content: AI_PROMPTS.STUDY_PLAN_SYSTEM,
         stream: false,
       }),
     });
@@ -579,9 +486,7 @@ ${JSON.stringify(questions)}`;
           messages,
         );
         const content = await this.parseChatResponse(response);
-        this.logger.warn(
-          `Recovered Ollama call with fallback base URL: ${fallbackBaseUrl}`,
-        );
+        this.logger.warn(`AI | fallback recovered: ${fallbackBaseUrl}`);
         return content;
       } catch (fallbackError: unknown) {
         const primaryMessage =
@@ -611,7 +516,7 @@ ${JSON.stringify(questions)}`;
     const content = data.message?.content ?? data.response ?? '';
 
     if (!content.trim()) {
-      throw new Error('Local model returned empty content');
+      throw new Error(AI_MESSAGES.MODEL_RETURNED_EMPTY_CONTENT);
     }
 
     return content;

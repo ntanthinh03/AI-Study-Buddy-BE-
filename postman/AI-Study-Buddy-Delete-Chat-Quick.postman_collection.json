@@ -1,0 +1,211 @@
+{
+  "info": {
+    "name": "AI Study Buddy - Delete Chat Quick Test",
+    "_postman_id": "3d2f1f3a-00d6-4eb0-96ec-6c71169a7fc2",
+    "description": "Quick QA flow for deleting conversation with ownership check.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1) POST /auth/login",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 201 or 200', function () {",
+              "  pm.expect([200, 201]).to.include(pm.response.code);",
+              "});",
+              "const json = pm.response.json();",
+              "pm.test('access_token exists', function () {",
+              "  pm.expect(json.access_token).to.be.a('string').and.not.empty;",
+              "});",
+              "pm.environment.set('token', json.access_token);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "login"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "2) GET /conversations (pick first id)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const list = pm.response.json();",
+              "pm.test('Conversations response is an array', function () {",
+              "  pm.expect(Array.isArray(list)).to.eql(true);",
+              "});",
+              "if (list.length === 0) {",
+              "  pm.environment.unset('conversationId');",
+              "  pm.test('At least one conversation exists for delete test', function () {",
+              "    pm.expect.fail('No conversation found. Create one chat first.');",
+              "  });",
+              "} else {",
+              "  pm.environment.set('conversationId', list[0].id);",
+              "  pm.environment.set('deletedConversationId', list[0].id);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/conversations",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "conversations"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "3) DELETE /conversations/:conversationId",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const json = pm.response.json();",
+              "pm.test('Delete success message', function () {",
+              "  pm.expect(json.message).to.eql('Conversation deleted successfully.');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/conversations/{{conversationId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "conversations",
+            "{{conversationId}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "4) GET /conversations (verify deleted)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status is 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const list = pm.response.json();",
+              "const deletedId = pm.environment.get('deletedConversationId');",
+              "const exists = Array.isArray(list) && list.some((x) => x.id === deletedId);",
+              "pm.test('Deleted conversation is not in list', function () {",
+              "  pm.expect(exists).to.eql(false);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/conversations",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "conversations"
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "event": [],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3001"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "email",
+      "value": "student@example.com"
+    },
+    {
+      "key": "password",
+      "value": "123456"
+    },
+    {
+      "key": "conversationId",
+      "value": ""
+    },
+    {
+      "key": "deletedConversationId",
+      "value": ""
+    }
+  ]
+}

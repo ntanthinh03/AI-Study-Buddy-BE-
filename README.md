@@ -6,6 +6,7 @@ This service supports:
 - Auth with JWT
 - Document upload and AI summarization
 - Account-scoped conversation history
+- Account-scoped conversation deletion
 - Quiz generation and persistence
 - Study plan generation and artifact persistence
 - Progress timeline and lesson history
@@ -80,6 +81,7 @@ Read these in order:
 2. `FE_AUTH_PASSWORD_APIS.md`
 3. `FE_CONVERSATION_HISTORY_QUIZ_PLAN.md`
 4. `FE_PROGRESS_JSON_API_GUIDE.md`
+5. `FE_DELETE_CHAT_ENDPOINT_SYNC.md`
 
 Short token-upload fix note:
 - Covered in `FE_API_INDEX.md` and `FE_AUTH_PASSWORD_APIS.md`
@@ -94,6 +96,30 @@ You can test APIs with:
 - Postman collection (if available in repo)
 
 Use Bruno/Postman for team-shared API verification and quick contract checks.
+
+### Postman Quick Test: Delete Chat
+
+For fast FE/QA verification of deleting a conversation:
+- Collection: `postman/AI-Study-Buddy-Delete-Chat-Quick.postman_collection.json`
+- Environment: `postman/AI-Study-Buddy-Delete-Chat-Quick.local.postman_environment.json`
+- Guide: `postman/README_DELETE_CHAT_QUICK_TEST.md`
+
+Quick run flow:
+1. Login
+2. Get conversations
+3. Delete one conversation
+4. Verify deleted conversation no longer appears
+
+### Conversation Delete Endpoint
+
+- Method: `DELETE`
+- Path: `/conversations/:conversationId`
+- Auth: `Bearer <access_token>`
+- Ownership rule: only conversations that belong to the current user can be deleted.
+
+Response examples:
+- `200 OK` with message `Conversation deleted successfully.`
+- `404 Not Found` when conversation does not exist or is not owned by current user.
 
 ## License
 

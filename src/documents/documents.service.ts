@@ -5,7 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { Document } from './entities/document.entity';
 import { ChatMessage } from './entities/chat-message.entity';
 import { Conversation, ConversationKind } from './entities/conversation.entity';
@@ -15,9 +15,16 @@ import { RagService } from '../modules/rag/rag.service';
 import * as fs from 'fs';
 import PDFParser from 'pdf2json';
 import { UploadedFile } from '../common/types/uploaded-file.type';
+import { DOCUMENT_MESSAGES } from '../common/constants/messages';
 
 interface PdfParserErrorData {
   parserError?: Error;
+}
+
+interface MessageImagePayload {
+  data: Buffer;
+  mimeType: string;
+  originalName: string;
 }
 
 @Injectable()
@@ -114,7 +121,7 @@ export class DocumentsService {
       });
 
       if (!extractedText || extractedText.trim().length === 0) {
-        throw new Error('PDF does not contain extractable text');
+        throw new Error(DOCUMENT_MESSAGES.PDF_NO_EXTRACTABLE_TEXT);
       }
 
       const cleanText = extractedText.substring(0, 15000);
@@ -134,12 +141,10 @@ export class DocumentsService {
 
       await this.ingestRagKnowledge(document, cleanText);
 
-      this.logger.log(
-        `Success: ${document.fileName} processed successfully.`,
-      );
+      this.logger.log(`DOC | pdf processed: ${document.fileName}`);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to process PDF ${document.id}: ${message}`);
+      this.logger.error(`DOC | pdf failed ${document.id}: ${message}`);
       await this.documentsRepository.update(document.id, {
         status: 'FAILED',
         summaryStatus: 'FAILED',
@@ -171,12 +176,10 @@ export class DocumentsService {
 
       await this.ingestRagKnowledge(document, extractedText);
 
-      this.logger.log(
-        `Success: image ${document.fileName} processed successfully.`,
-      );
+      this.logger.log(`DOC | image processed: ${document.fileName}`);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to process image ${document.id}: ${message}`);
+      this.logger.error(`DOC | image failed ${document.id}: ${message}`);
       await this.documentsRepository.update(document.id, {
         status: 'FAILED',
         summaryStatus: 'FAILED',
@@ -204,9 +207,7 @@ export class DocumentsService {
       });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(
-        `RAG ingestion failed for document ${document.id}: ${message}`,
-      );
+      this.logger.error(`DOC | rag failed ${document.id}: ${message}`);
       await this.documentsRepository.update(document.id, {
         ragStatus: 'FAILED',
       });
@@ -236,6 +237,44 @@ export class DocumentsService {
       document: { id: docId },
       conversation: { id: conversation.id },
     });
+  }
+
+  async saveGeneralMessage(
+    userId: string,
+    question: string,
+    answer: string,
+    conversationId?: string,
+    title?: string,
+    image?: MessageImagePayload,
+  ) {
+    const conversation = await this.upsertGeneralConversation(
+      userId,
+      question,
+      conversationId,
+      title,
+    );
+
+    const message = await this.chatRepository.save({
+      question,
+      answer,
+      messageType: 'QA',
+      artifactType: null,
+      artifactJson: null,
+      imageData: image?.data ?? null,
+      imageMimeType: image?.mimeType ?? null,
+      imageOriginalName: image?.originalName ?? null,
+      user: { id: userId },
+      document: null,
+      conversation: { id: conversation.id },
+    });
+
+    return {
+      conversationId: conversation.id,
+      messageId: message.id,
+      question: message.question,
+      answer: message.answer,
+      createdAt: message.createdAt,
+    };
   }
 
   async saveArtifactMessage(
@@ -283,13 +322,52 @@ export class DocumentsService {
       return [];
     }
 
-    return await this.chatRepository.find({
-      where: {
-        conversation: { id: conversationId },
-        user: { id: userId },
-      },
-      order: { createdAt: 'ASC' },
+    return await this.chatRepository
+      .createQueryBuilder('message')
+      .leftJoin('message.conversation', 'conversation')
+      .leftJoin('message.user', 'user')
+      .where('conversation.id = :conversationId', { conversationId })
+      .andWhere('user.id = :userId', { userId })
+      .orderBy('message.createdAt', 'ASC')
+      .getMany();
+  }
+
+  async removeConversation(userId: string, conversationId: string) {
+    const conversation = await this.conversationRepository.findOne({
+      where: { id: conversationId, userId },
     });
+
+    if (!conversation) {
+      throw new NotFoundException(DOCUMENT_MESSAGES.CONVERSATION_NOT_FOUND);
+    }
+
+    await this.conversationRepository.delete(conversation.id);
+    return { message: DOCUMENT_MESSAGES.CONVERSATION_DELETED };
+  }
+
+  async getGeneralMessageImage(userId: string, messageId: string) {
+    const message = await this.chatRepository
+      .createQueryBuilder('message')
+      .leftJoin('message.user', 'user')
+      .addSelect('message.imageData')
+      .where('message.id = :messageId', { messageId })
+      .andWhere('user.id = :userId', { userId })
+      .getOne();
+
+    if (!message?.imageData) {
+      throw new NotFoundException(DOCUMENT_MESSAGES.IMAGE_NOT_FOUND);
+    }
+
+    const imageBuffer = Buffer.isBuffer(message.imageData)
+      ? message.imageData
+      : Buffer.from(message.imageData as unknown as string);
+
+    return {
+      messageId: message.id,
+      mimeType: message.imageMimeType ?? 'application/octet-stream',
+      originalName: message.imageOriginalName ?? 'image',
+      base64: imageBuffer.toString('base64'),
+    };
   }
 
   private async upsertConversation(
@@ -332,12 +410,54 @@ export class DocumentsService {
     return await this.conversationRepository.save(conversation);
   }
 
+  private async upsertGeneralConversation(
+    userId: string,
+    preview: string,
+    conversationId?: string,
+    title?: string,
+  ) {
+    let conversation: Conversation | null = null;
+
+    if (conversationId) {
+      conversation = await this.conversationRepository.findOne({
+        where: {
+          id: conversationId,
+          userId,
+          documentId: IsNull(),
+        },
+      });
+    }
+
+    if (!conversation) {
+      const generatedTitle =
+        title?.trim() ||
+        preview.trim().slice(0, 80) ||
+        'General Chat';
+
+      conversation = this.conversationRepository.create({
+        userId,
+        documentId: null,
+        title: generatedTitle,
+        kind: 'CHAT',
+        lastMessagePreview: preview,
+        lastArtifactType: null,
+        lastMessageAt: new Date(),
+      });
+
+      return await this.conversationRepository.save(conversation);
+    }
+
+    conversation.lastMessagePreview = preview;
+    conversation.lastMessageAt = new Date();
+    return await this.conversationRepository.save(conversation);
+  }
+
   async createAndSaveStudyPlan(userId: string, docId: string) {
     const doc = await this.findOne(docId, userId);
 
     if (!doc.contentText || doc.contentText.trim().length === 0) {
       throw new BadRequestException(
-        'Tai lieu chua san sang de tao study plan.',
+        DOCUMENT_MESSAGES.DOCUMENT_NOT_READY_FOR_STUDY_PLAN,
       );
     }
 
@@ -379,7 +499,7 @@ export class DocumentsService {
     const doc = await this.documentsRepository.findOne({
       where: { id, user: { id: userId } },
     });
-    if (!doc) throw new NotFoundException('Document not found');
+    if (!doc) throw new NotFoundException(DOCUMENT_MESSAGES.DOCUMENT_NOT_FOUND);
     return doc;
   }
 
@@ -394,6 +514,6 @@ export class DocumentsService {
     }
 
     await this.documentsRepository.delete(id);
-    return { message: 'Document and related data deleted successfully.' };
+    return { message: DOCUMENT_MESSAGES.DOCUMENT_DELETED };
   }
 }
