@@ -14,7 +14,6 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import * as bcrypt from 'bcrypt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, MoreThan, Repository } from 'typeorm';
-import type { StringValue } from 'ms';
 import { PasswordReset } from './entities/password-reset.entity';
 import { PasswordResetOtp } from './entities/password-reset-otp.entity';
 import { User } from '../users/entities/user.entity';
@@ -216,85 +215,33 @@ export class AuthService {
       );
     }
 
-    otpRecord.verifiedAt = new Date();
     otpRecord.usedAt = new Date();
+
+      return { message: AUTH_MESSAGES.OTP_VERIFIED };
+    }
+
+    async resetPasswordByOtp(email: string, newPassword: string) {
+      const otpRecord = await this.passwordResetOtpRepository.findOne({
+        where: {
+          requestedEmail: email,
+          verifiedAt: MoreThan(new Date(0)),
+          usedAt: IsNull(),
+          resetCompletedAt: IsNull(),
+          expiresAt: MoreThan(new Date()),
+        },
+        relations: ['user'],
+        order: { createdAt: 'DESC' },
+      });
+
+      if (!otpRecord) {
+        throw new BadRequestException(AUTH_MESSAGES.OTP_INVALID_OR_EXPIRED);
+      }
     await this.passwordResetOtpRepository.save(otpRecord);
-
-    const expiresIn =
-      this.configService.get<string>('RESET_PASSWORD_TOKEN_EXPIRES_IN') ??
-      '15m';
-
-    const resetToken = await this.jwtService.signAsync(
-      {
-        sub: otpRecord.user.id,
-        email: otpRecord.user.email,
-        purpose: 'password_reset',
-        otpId: otpRecord.id,
-      },
-      {
-        expiresIn: expiresIn as StringValue,
-        secret:
-          this.configService.get<string>('JWT_SECRET') ||
-          'fallback_secret_key',
-      },
-    );
-
-    return {
-      message: AUTH_MESSAGES.OTP_VERIFIED,
-      resetToken,
-      expiresIn,
-    };
-  }
-
-  async resetPasswordWithToken(resetToken: string, newPassword: string) {
-    const secret =
-      this.configService.get<string>('JWT_SECRET') || 'fallback_secret_key';
-
-    let payload: {
-      sub?: string;
-      purpose?: string;
-      otpId?: string;
-    };
-
-    try {
-      payload = await this.jwtService.verifyAsync(resetToken, { secret });
-    } catch {
-      throw new UnauthorizedException(
-        AUTH_MESSAGES.RESET_TOKEN_INVALID_OR_EXPIRED,
-      );
-    }
-
-    if (
-      !payload?.sub ||
-      payload.purpose !== 'password_reset' ||
-      !payload.otpId
-    ) {
-      throw new UnauthorizedException(
-        AUTH_MESSAGES.RESET_TOKEN_INVALID_OR_EXPIRED,
-      );
-    }
-
-    const otpRecord = await this.passwordResetOtpRepository.findOne({
-      where: { id: payload.otpId },
-      relations: ['user'],
-    });
-
-    if (
-      !otpRecord ||
-      !otpRecord.verifiedAt ||
-      otpRecord.user.id !== payload.sub
-    ) {
-      throw new UnauthorizedException(
-        AUTH_MESSAGES.RESET_TOKEN_INVALID_OR_EXPIRED,
-      );
-    }
-
-    if (otpRecord.resetCompletedAt) {
-      throw new BadRequestException(AUTH_MESSAGES.RESET_TOKEN_ALREADY_USED);
-    }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await this.usersService.updatePassword(otpRecord.user.id, hashedPassword);
+      otpRecord.usedAt = new Date();
+
 
     otpRecord.resetCompletedAt = new Date();
     await this.passwordResetOtpRepository.save(otpRecord);

@@ -7,8 +7,7 @@ Use this flow for the password recovery screen.
 1. FE requests OTP by email.
 2. User receives a 6-digit OTP by email.
 3. FE verifies OTP with the same email.
-4. Backend returns a short-lived reset token.
-5. FE submits the reset token with the new password.
+4. FE calls reset-password with email + newPassword.
 
 ## Recommended UI States
 
@@ -66,9 +65,7 @@ Success response:
 
 ```json
 {
-  "message": "OTP verified successfully.",
-  "resetToken": "<jwt-reset-token>",
-  "expiresIn": "15m"
+  "message": "OTP verified successfully."
 }
 ```
 
@@ -77,15 +74,15 @@ Typical errors:
 - `400` OTP is invalid or has expired.
 - `400` Too many invalid OTP attempts. Please request a new OTP.
 
-## 3) Reset Password with Token
+## 3) Reset Password
 
-Endpoint: `POST /auth/forgot-password/reset-with-token`
+Endpoint: `POST /auth/forgot-password/reset-password`
 
 Request body:
 
 ```json
 {
-  "resetToken": "<jwt-reset-token>",
+  "email": "user@example.com",
   "newPassword": "newPassword123"
 }
 ```
@@ -100,16 +97,14 @@ Success response:
 
 Typical errors:
 
-- `400` Reset token is required.
 - `400` Password must be at least 6 characters long.
-- `401` Reset token is invalid or has expired.
-- `400` Reset token has already been used.
+- `400` OTP is invalid or has expired (OTP not verified, expired, or already consumed).
 
 ## FE Implementation Notes
 
 - Keep `email` in local state between step 1 and step 2.
 - Do not allow OTP verification until the input has 6 digits.
-- Store `resetToken` only in memory/session state.
-- Do not display or log the OTP or reset token.
+- After OTP verification succeeds, call reset-password with `email` and `newPassword`.
+- Do not display or log the OTP.
 - After password reset succeeds, redirect user to login and clear recovery state.
 - If you are testing locally without Brevo, set `MAILER_DEV_FALLBACK=true` only in development.

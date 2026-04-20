@@ -23,7 +23,7 @@ All protected APIs require:
 - `POST /auth/login`
 - `POST /auth/forgot-password/send-otp`
 - `POST /auth/forgot-password/verify-otp`
-- `POST /auth/forgot-password/reset-with-token`
+- `POST /auth/forgot-password/reset-password`
 - `POST /auth/forgot-password`
 - `POST /auth/change-password`
 
@@ -32,6 +32,8 @@ Contract notes:
 - Register requires `email`, `password`, `fullName`, and `phoneNumber`.
 - Login response returns `{ access_token, user }`.
 - OTP reset flow is the recommended forgot-password path for FE.
+- `POST /auth/forgot-password/verify-otp` verifies OTP only.
+- `POST /auth/forgot-password/reset-password` updates password after OTP is verified.
 - Forgot password success response returns `{ message: "Password reset completed successfully." }`.
 - Change password success response returns `{ message: "Password changed successfully." }`.
 

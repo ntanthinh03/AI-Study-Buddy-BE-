@@ -10,7 +10,7 @@ Use the OTP email flow as the primary forgot-password experience:
 
 1. `POST /auth/forgot-password/send-otp`
 2. `POST /auth/forgot-password/verify-otp`
-3. `POST /auth/forgot-password/reset-with-token`
+3. `POST /auth/forgot-password/reset-password`
 
 Detailed contract: [FE_FORGOT_PASSWORD_OTP_APIS.md](FE_FORGOT_PASSWORD_OTP_APIS.md)
 
@@ -81,6 +81,6 @@ Typical errors:
 ## FE Notes
 
 - Validate password length on FE before calling any password API.
-- Never log plaintext passwords, OTPs, or reset tokens.
+- Never log plaintext passwords or OTPs.
 - After password reset or change, redirect the user to login if your session policy requires it.
 - The change-password endpoint does not revoke existing tokens automatically.

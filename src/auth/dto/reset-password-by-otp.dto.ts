@@ -1,13 +1,14 @@
-import { IsEmail, IsNotEmpty, Matches } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
 import { AUTH_VALIDATION_MESSAGES } from '../../common/constants/messages';
 
-export class VerifyResetOtpDto {
+export class ResetPasswordByOtpDto {
   @IsNotEmpty({ message: AUTH_VALIDATION_MESSAGES.EMAIL_REQUIRED })
   @IsEmail({}, { message: AUTH_VALIDATION_MESSAGES.EMAIL_INVALID })
   email!: string;
 
-  @Matches(/^\d{6}$/, {
-    message: AUTH_VALIDATION_MESSAGES.OTP_MUST_BE_6_DIGITS,
+  @IsString()
+  @MinLength(6, {
+    message: AUTH_VALIDATION_MESSAGES.PASSWORD_MIN_LENGTH,
   })
-  otp!: string;
+  newPassword!: string;
 }
