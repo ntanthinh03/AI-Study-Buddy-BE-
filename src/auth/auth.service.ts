@@ -215,34 +215,33 @@ export class AuthService {
       );
     }
 
-    otpRecord.usedAt = new Date();
-
-      return { message: AUTH_MESSAGES.OTP_VERIFIED };
-    }
-
-    async resetPasswordByOtp(email: string, newPassword: string) {
-      const otpRecord = await this.passwordResetOtpRepository.findOne({
-        where: {
-          requestedEmail: email,
-          verifiedAt: MoreThan(new Date(0)),
-          usedAt: IsNull(),
-          resetCompletedAt: IsNull(),
-          expiresAt: MoreThan(new Date()),
-        },
-        relations: ['user'],
-        order: { createdAt: 'DESC' },
-      });
-
-      if (!otpRecord) {
-        throw new BadRequestException(AUTH_MESSAGES.OTP_INVALID_OR_EXPIRED);
-      }
+    otpRecord.verifiedAt = new Date();
     await this.passwordResetOtpRepository.save(otpRecord);
+
+    return { message: AUTH_MESSAGES.OTP_VERIFIED };
+  }
+
+  async resetPasswordByOtp(email: string, newPassword: string) {
+    const otpRecord = await this.passwordResetOtpRepository.findOne({
+      where: {
+        requestedEmail: email,
+        verifiedAt: MoreThan(new Date(0)),
+        usedAt: IsNull(),
+        resetCompletedAt: IsNull(),
+        expiresAt: MoreThan(new Date()),
+      },
+      relations: ['user'],
+      order: { createdAt: 'DESC' },
+    });
+
+    if (!otpRecord) {
+      throw new BadRequestException(AUTH_MESSAGES.OTP_INVALID_OR_EXPIRED);
+    }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await this.usersService.updatePassword(otpRecord.user.id, hashedPassword);
-      otpRecord.usedAt = new Date();
 
-
+    otpRecord.usedAt = new Date();
     otpRecord.resetCompletedAt = new Date();
     await this.passwordResetOtpRepository.save(otpRecord);
 
