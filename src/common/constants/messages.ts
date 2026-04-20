@@ -13,13 +13,24 @@ export const AUTH_MESSAGES = {
   CURRENT_PASSWORD_INCORRECT: 'Current password is incorrect.',
   PASSWORD_RESET_COMPLETED: 'Password reset completed successfully.',
   PASSWORD_CHANGED: 'Password changed successfully.',
+  OTP_SENT_IF_ACCOUNT_EXISTS:
+    'If the account exists, an OTP has been sent to the email address.',
+  OTP_INVALID_OR_EXPIRED: 'OTP is invalid or has expired.',
+  OTP_TOO_MANY_ATTEMPTS:
+    'Too many invalid OTP attempts. Please request a new OTP.',
+  OTP_VERIFIED: 'OTP verified successfully.',
+  RESET_TOKEN_INVALID_OR_EXPIRED: 'Reset token is invalid or has expired.',
+  RESET_TOKEN_ALREADY_USED: 'Reset token has already been used.',
 } as const;
 
 export const AUTH_VALIDATION_MESSAGES = {
+  EMAIL_REQUIRED: 'Email address is required.',
   EMAIL_INVALID: 'Email address is invalid.',
   PASSWORD_MIN_LENGTH: 'Password must be at least 6 characters long.',
   FULL_NAME_REQUIRED: 'Full name is required.',
   PHONE_REQUIRED: 'Phone number is required.',
+  OTP_MUST_BE_6_DIGITS: 'OTP must be exactly 6 digits.',
+  RESET_TOKEN_REQUIRED: 'Reset token is required.',
 } as const;
 
 export const CHAT_MESSAGES = {

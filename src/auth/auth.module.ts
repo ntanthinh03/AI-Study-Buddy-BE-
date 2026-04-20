@@ -9,11 +9,14 @@ import { AuthController } from './auth.controller';
 import { UsersModule } from '../users/users.module';
 import { JwtStrategy } from './jwt.strategy';
 import { PasswordReset } from './entities/password-reset.entity';
+import { PasswordResetOtp } from './entities/password-reset-otp.entity';
+import { MailerModule } from '../mailer/mailer.module';
 
 @Module({
   imports: [
     UsersModule,
-    TypeOrmModule.forFeature([PasswordReset]),
+    MailerModule,
+    TypeOrmModule.forFeature([PasswordReset, PasswordResetOtp]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

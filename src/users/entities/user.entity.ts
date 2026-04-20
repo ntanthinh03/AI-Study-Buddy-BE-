@@ -9,6 +9,7 @@ import {
 import { Document } from '../../documents/entities/document.entity';
 import { Quiz } from '../../quizzes/entities/quiz.entity';
 import { PasswordReset } from '../../auth/entities/password-reset.entity';
+import { PasswordResetOtp } from '../../auth/entities/password-reset-otp.entity';
 
 @Entity('users')
 export class User {
@@ -44,6 +45,9 @@ export class User {
 
   @OneToMany(() => PasswordReset, (passwordReset) => passwordReset.user)
   passwordResets!: PasswordReset[];
+
+  @OneToMany(() => PasswordResetOtp, (passwordResetOtp) => passwordResetOtp.user)
+  passwordResetOtps!: PasswordResetOtp[];
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;

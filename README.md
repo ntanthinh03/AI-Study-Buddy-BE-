@@ -79,9 +79,10 @@ Token is client-side session data, not a database row.
 Read these in order:
 1. `FE_API_INDEX.md`
 2. `FE_AUTH_PASSWORD_APIS.md`
-3. `FE_CONVERSATION_HISTORY_QUIZ_PLAN.md`
-4. `FE_PROGRESS_JSON_API_GUIDE.md`
-5. `FE_DELETE_CHAT_ENDPOINT_SYNC.md`
+3. `FE_FORGOT_PASSWORD_OTP_APIS.md`
+4. `FE_CONVERSATION_HISTORY_QUIZ_PLAN.md`
+5. `FE_PROGRESS_JSON_API_GUIDE.md`
+6. `FE_DELETE_CHAT_ENDPOINT_SYNC.md`
 
 Recommended for handover and implementation consistency:
 - `FE_BE_ALIGNMENT_RECOMMENDATIONS.md`

@@ -13,10 +13,14 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import * as bcrypt from 'bcrypt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, MoreThan, Repository } from 'typeorm';
+import type { StringValue } from 'ms';
 import { PasswordReset } from './entities/password-reset.entity';
+import { PasswordResetOtp } from './entities/password-reset-otp.entity';
 import { User } from '../users/entities/user.entity';
 import { AUTH_MESSAGES } from '../common/constants/messages';
+import { randomInt } from 'crypto';
+import { MailerService } from '../mailer/mailer.service';
 
 @Injectable()
 export class AuthService {
@@ -24,8 +28,11 @@ export class AuthService {
     private usersService: UsersService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private mailerService: MailerService,
     @InjectRepository(PasswordReset)
     private passwordResetRepository: Repository<PasswordReset>,
+    @InjectRepository(PasswordResetOtp)
+    private passwordResetOtpRepository: Repository<PasswordResetOtp>,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -129,6 +136,180 @@ export class AuthService {
     return { message: AUTH_MESSAGES.PASSWORD_RESET_COMPLETED };
   }
 
+  async sendForgotPasswordOtp(email: string) {
+    const user = await this.usersService.findByEmail(email);
+    if (!user) {
+      throw new NotFoundException(AUTH_MESSAGES.ACCOUNT_NOT_FOUND_FOR_EMAIL);
+    }
+
+    const otp = this.generateSixDigitOtp();
+    const otpHash = await bcrypt.hash(otp, 10);
+    const otpExpiresInMinutes = Number(
+      this.configService.get<string>('RESET_OTP_EXPIRES_IN_MINUTES') ?? '10',
+    );
+    const expiresAt = new Date(Date.now() + otpExpiresInMinutes * 60 * 1000);
+
+    const otpRecord = await this.passwordResetOtpRepository.save({
+      user,
+      requestedEmail: email,
+      otpHash,
+      expiresAt,
+      attemptCount: 0,
+      verifiedAt: null,
+      usedAt: null,
+      resetCompletedAt: null,
+    });
+
+    try {
+      await this.mailerService.sendPasswordResetOtpEmail(
+        email,
+        otp,
+        otpExpiresInMinutes,
+      );
+    } catch (error) {
+      await this.passwordResetOtpRepository.delete({ id: otpRecord.id });
+      throw error;
+    }
+
+    return {
+      message: AUTH_MESSAGES.OTP_SENT_IF_ACCOUNT_EXISTS,
+      expiresInMinutes: otpExpiresInMinutes,
+    };
+  }
+
+  async verifyForgotPasswordOtp(email: string, otp: string) {
+    const otpRecord = await this.passwordResetOtpRepository.findOne({
+      where: {
+        requestedEmail: email,
+        usedAt: IsNull(),
+        resetCompletedAt: IsNull(),
+        expiresAt: MoreThan(new Date()),
+      },
+      relations: ['user'],
+      order: { createdAt: 'DESC' },
+    });
+
+    if (!otpRecord) {
+      throw new BadRequestException(AUTH_MESSAGES.OTP_INVALID_OR_EXPIRED);
+    }
+
+    const maxAttempts = Number(
+      this.configService.get<string>('RESET_OTP_MAX_ATTEMPTS') ?? '5',
+    );
+
+    if (otpRecord.attemptCount >= maxAttempts) {
+      throw new BadRequestException(AUTH_MESSAGES.OTP_TOO_MANY_ATTEMPTS);
+    }
+
+    const isOtpValid = await bcrypt.compare(otp, otpRecord.otpHash);
+    if (!isOtpValid) {
+      otpRecord.attemptCount += 1;
+      if (otpRecord.attemptCount >= maxAttempts) {
+        otpRecord.usedAt = new Date();
+      }
+      await this.passwordResetOtpRepository.save(otpRecord);
+
+      throw new BadRequestException(
+        otpRecord.attemptCount >= maxAttempts
+          ? AUTH_MESSAGES.OTP_TOO_MANY_ATTEMPTS
+          : AUTH_MESSAGES.OTP_INVALID_OR_EXPIRED,
+      );
+    }
+
+    otpRecord.verifiedAt = new Date();
+    otpRecord.usedAt = new Date();
+    await this.passwordResetOtpRepository.save(otpRecord);
+
+    const expiresIn =
+      this.configService.get<string>('RESET_PASSWORD_TOKEN_EXPIRES_IN') ??
+      '15m';
+
+    const resetToken = await this.jwtService.signAsync(
+      {
+        sub: otpRecord.user.id,
+        email: otpRecord.user.email,
+        purpose: 'password_reset',
+        otpId: otpRecord.id,
+      },
+      {
+        expiresIn: expiresIn as StringValue,
+        secret:
+          this.configService.get<string>('JWT_SECRET') ||
+          'fallback_secret_key',
+      },
+    );
+
+    return {
+      message: AUTH_MESSAGES.OTP_VERIFIED,
+      resetToken,
+      expiresIn,
+    };
+  }
+
+  async resetPasswordWithToken(resetToken: string, newPassword: string) {
+    const secret =
+      this.configService.get<string>('JWT_SECRET') || 'fallback_secret_key';
+
+    let payload: {
+      sub?: string;
+      purpose?: string;
+      otpId?: string;
+    };
+
+    try {
+      payload = await this.jwtService.verifyAsync(resetToken, { secret });
+    } catch {
+      throw new UnauthorizedException(
+        AUTH_MESSAGES.RESET_TOKEN_INVALID_OR_EXPIRED,
+      );
+    }
+
+    if (
+      !payload?.sub ||
+      payload.purpose !== 'password_reset' ||
+      !payload.otpId
+    ) {
+      throw new UnauthorizedException(
+        AUTH_MESSAGES.RESET_TOKEN_INVALID_OR_EXPIRED,
+      );
+    }
+
+    const otpRecord = await this.passwordResetOtpRepository.findOne({
+      where: { id: payload.otpId },
+      relations: ['user'],
+    });
+
+    if (
+      !otpRecord ||
+      !otpRecord.verifiedAt ||
+      otpRecord.user.id !== payload.sub
+    ) {
+      throw new UnauthorizedException(
+        AUTH_MESSAGES.RESET_TOKEN_INVALID_OR_EXPIRED,
+      );
+    }
+
+    if (otpRecord.resetCompletedAt) {
+      throw new BadRequestException(AUTH_MESSAGES.RESET_TOKEN_ALREADY_USED);
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await this.usersService.updatePassword(otpRecord.user.id, hashedPassword);
+
+    otpRecord.resetCompletedAt = new Date();
+    await this.passwordResetOtpRepository.save(otpRecord);
+
+    await this.passwordResetRepository.save({
+      user: otpRecord.user,
+      requestedEmail: otpRecord.user.email,
+      requestedPhone: otpRecord.user.phoneNumber ?? '',
+      isSuccessful: true,
+      reason: 'Password reset via OTP email token',
+    });
+
+    return { message: AUTH_MESSAGES.PASSWORD_RESET_COMPLETED };
+  }
+
   async changePassword(email: string, dto: ChangePasswordDto) {
     if (!email) {
       throw new UnauthorizedException(AUTH_MESSAGES.AUTHENTICATION_REQUIRED);
@@ -159,5 +340,9 @@ export class AuthService {
 
   private normalizePhone(phone: string) {
     return phone.replace(/\D/g, '');
+  }
+
+  private generateSixDigitOtp() {
+    return String(randomInt(0, 1_000_000)).padStart(6, '0');
   }
 }

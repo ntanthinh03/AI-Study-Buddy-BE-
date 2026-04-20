@@ -1,21 +1,26 @@
 # FE Integration: Password APIs
 
-Canonical endpoint index: [FE_API_INDEX.md](FE_API_INDEX.md)
+Canonical index: [FE_API_INDEX.md](FE_API_INDEX.md)
 
-This document covers two password flows:
+This document covers the password-related APIs currently active in the backend.
 
-1. Forgot password with email + phone verification
-2. Change password for authenticated users
+## Recommended Recovery Flow
 
-## 1) Forgot Password
+Use the OTP email flow as the primary forgot-password experience:
 
-Endpoint: `POST /auth/forgot-password`
+1. `POST /auth/forgot-password/send-otp`
+2. `POST /auth/forgot-password/verify-otp`
+3. `POST /auth/forgot-password/reset-with-token`
 
-### Auth
+Detailed contract: [FE_FORGOT_PASSWORD_OTP_APIS.md](FE_FORGOT_PASSWORD_OTP_APIS.md)
 
-No Bearer token required.
+## Legacy Recovery Flow
 
-### Request Body
+The legacy phone-based reset endpoint still exists for backward compatibility:
+
+### `POST /auth/forgot-password`
+
+Request body:
 
 ```json
 {
@@ -25,7 +30,7 @@ No Bearer token required.
 }
 ```
 
-### Success Response
+Success response:
 
 ```json
 {
@@ -33,27 +38,23 @@ No Bearer token required.
 }
 ```
 
-### Error Cases
+Typical errors:
 
-- 404: account not found by email
-- 400: account exists but has no registered phone number
-- 401: email and phone combination is invalid
+- `404` Account not found for this email address.
+- `400` The account does not have a registered phone number.
+- `401` Email address or phone number is incorrect.
 
-## 2) Change Password
+## Change Password for Logged-in Users
 
-Endpoint: `POST /auth/change-password`
+### `POST /auth/change-password`
 
-### Auth
-
-Bearer token required.
-
-Header:
+Auth:
 
 ```text
 Authorization: Bearer <access_token>
 ```
 
-### Request Body
+Request body:
 
 ```json
 {
@@ -62,7 +63,7 @@ Authorization: Bearer <access_token>
 }
 ```
 
-### Success Response
+Success response:
 
 ```json
 {
@@ -70,23 +71,16 @@ Authorization: Bearer <access_token>
 }
 ```
 
-### Error Cases
+Typical errors:
 
-- 401: token invalid/expired
-- 401: old password is incorrect
-- 404: account not found
-- 400: account has no local password
+- `401` token invalid or expired
+- `401` current password is incorrect
+- `404` account not found
+- `400` the account does not use a local password
 
-## FE Implementation Notes
+## FE Notes
 
-- Validate password length on FE before calling API.
-- Never log plaintext passwords.
-- If API returns 401 due to token expiration, clear session and redirect to login.
-- Password change does not revoke existing token automatically; FE can choose either:
-  - keep current session, or
-  - force re-login by policy.
-
-## Data Persistence Notes
-
-- `users.password` is updated on success.
-- `password_resets` stores forgot-password attempt history.
+- Validate password length on FE before calling any password API.
+- Never log plaintext passwords, OTPs, or reset tokens.
+- After password reset or change, redirect the user to login if your session policy requires it.
+- The change-password endpoint does not revoke existing tokens automatically.
