@@ -13,7 +13,7 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import * as bcrypt from 'bcrypt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, MoreThan, Repository } from 'typeorm';
+import { IsNull, MoreThan, Not, Repository } from 'typeorm';
 import { PasswordReset } from './entities/password-reset.entity';
 import { PasswordResetOtp } from './entities/password-reset-otp.entity';
 import { User } from '../users/entities/user.entity';
@@ -136,7 +136,8 @@ export class AuthService {
   }
 
   async sendForgotPasswordOtp(email: string) {
-    const user = await this.usersService.findByEmail(email);
+    const normalizedEmail = this.normalizeEmail(email);
+    const user = await this.usersService.findByEmail(normalizedEmail);
     if (!user) {
       throw new NotFoundException(AUTH_MESSAGES.ACCOUNT_NOT_FOUND_FOR_EMAIL);
     }
@@ -150,7 +151,7 @@ export class AuthService {
 
     const otpRecord = await this.passwordResetOtpRepository.save({
       user,
-      requestedEmail: email,
+      requestedEmail: normalizedEmail,
       otpHash,
       expiresAt,
       attemptCount: 0,
@@ -161,7 +162,7 @@ export class AuthService {
 
     try {
       await this.mailerService.sendPasswordResetOtpEmail(
-        email,
+        normalizedEmail,
         otp,
         otpExpiresInMinutes,
       );
@@ -177,9 +178,10 @@ export class AuthService {
   }
 
   async verifyForgotPasswordOtp(email: string, otp: string) {
+    const normalizedEmail = this.normalizeEmail(email);
     const otpRecord = await this.passwordResetOtpRepository.findOne({
       where: {
-        requestedEmail: email,
+        requestedEmail: normalizedEmail,
         usedAt: IsNull(),
         resetCompletedAt: IsNull(),
         expiresAt: MoreThan(new Date()),
@@ -222,10 +224,11 @@ export class AuthService {
   }
 
   async resetPasswordByOtp(email: string, newPassword: string) {
+    const normalizedEmail = this.normalizeEmail(email);
     const otpRecord = await this.passwordResetOtpRepository.findOne({
       where: {
-        requestedEmail: email,
-        verifiedAt: MoreThan(new Date(0)),
+        requestedEmail: normalizedEmail,
+        verifiedAt: Not(IsNull()),
         usedAt: IsNull(),
         resetCompletedAt: IsNull(),
         expiresAt: MoreThan(new Date()),
@@ -286,6 +289,10 @@ export class AuthService {
 
   private normalizePhone(phone: string) {
     return phone.replace(/\D/g, '');
+  }
+
+  private normalizeEmail(email: string) {
+    return email.trim().toLowerCase();
   }
 
   private generateSixDigitOtp() {
