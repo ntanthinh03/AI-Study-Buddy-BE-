@@ -32,8 +32,7 @@ export class QuizzesService {
 
     const questions = await this.aiService.generateQuiz(document.contentText);
 
-    await this.saveQuiz(questions, documentId, userId);
-    await this.documentsService.saveArtifactMessage(
+    const artifactMessage = await this.documentsService.saveArtifactMessage(
       userId,
       documentId,
       'QUIZ',
@@ -41,24 +40,37 @@ export class QuizzesService {
       'Generated quiz',
     );
 
-    return questions;
+    const conversationId = artifactMessage.conversation?.id;
+    if (!conversationId) {
+      throw new Error('Failed to bind quiz to conversation.');
+    }
+
+    const quiz = await this.saveQuiz(questions, documentId, userId, conversationId);
+
+    return {
+      quizId: quiz.id,
+      conversationId,
+      questions,
+    };
   }
   async saveQuiz(
     questions: QuizQuestion[],
     documentId: string,
     userId: string,
+    conversationId: string,
   ) {
     const quiz = this.quizzesRepository.create({
       questions,
       document: { id: documentId },
       user: { id: userId },
+      conversation: { id: conversationId },
     });
     return await this.quizzesRepository.save(quiz);
   }
   async findAllByUser(userId: string) {
     return await this.quizzesRepository.find({
       where: { user: { id: userId } },
-      relations: ['document'],
+      relations: ['document', 'conversation'],
       order: { createdAt: 'DESC' },
     });
   }

@@ -4,7 +4,12 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { Conversation } from '../../documents/entities/conversation.entity';
+
+export type LessonStatus = 'IN_PROGRESS' | 'COMPLETED';
 
 @Entity('learning_lessons')
 export class LearningLesson {
@@ -17,6 +22,9 @@ export class LearningLesson {
   @Column({ name: 'document_id', type: 'text', nullable: true })
   documentId: string | null;
 
+  @Column({ name: 'conversation_id', type: 'uuid', nullable: true })
+  conversationId: string | null;
+
   @Column({ name: 'title', type: 'text' })
   title: string;
 
@@ -26,6 +34,12 @@ export class LearningLesson {
   @Column({ name: 'quiz_json', type: 'jsonb', nullable: true })
   quizJson: unknown;
 
+  @Column({ name: 'status', type: 'text', default: 'IN_PROGRESS' })
+  status: LessonStatus;
+
+  @Column({ name: 'completed_at', type: 'timestamptz', nullable: true })
+  completedAt: Date | null;
+
   @Column({ name: 'last_studied_at', type: 'timestamptz', nullable: true })
   lastStudiedAt: Date | null;
 
@@ -34,4 +48,8 @@ export class LearningLesson {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @ManyToOne(() => Conversation, { onDelete: 'CASCADE', nullable: true })
+  @JoinColumn({ name: 'conversation_id' })
+  conversation: Conversation | null;
 }

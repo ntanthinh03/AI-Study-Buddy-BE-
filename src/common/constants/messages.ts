@@ -72,8 +72,10 @@ export const PROGRESS_MESSAGES = {
   NEXT_MODULE_UNLOCKED:
     'Current module completed. The next module has been unlocked.',
   MODULE_UPDATED: 'Module updated successfully.',
+  CONVERSATION_NOT_FOUND: 'Conversation not found.',
   LESSON_NOT_FOUND: 'Lesson not found.',
   LESSON_QUIZ_SAVED: 'Lesson quiz was saved successfully.',
+  LESSON_STATUS_UPDATED: 'Lesson status was updated successfully.',
 } as const;
 
 export const RAG_MESSAGES = {

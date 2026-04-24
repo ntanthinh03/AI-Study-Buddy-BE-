@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Param,
+  Query,
   Request,
   UseGuards,
 } from '@nestjs/common';
@@ -13,6 +14,7 @@ import { SaveLessonDto } from './dto/save-lesson.dto';
 import { SaveLessonQuizDto } from './dto/save-lesson-quiz.dto';
 import { InitProgressDto } from './dto/init-progress.dto';
 import { CompleteProgressDto } from './dto/complete-progress.dto';
+import { UpdateLessonStatusDto } from './dto/update-lesson-status.dto';
 import type { AuthenticatedRequest } from '../common/types/authenticated-request.type';
 
 @Controller('progress')
@@ -78,9 +80,26 @@ export class ProgressController {
   }
 
   @Get('lessons')
-  async getMyLessons(@Request() req: AuthenticatedRequest) {
+  async getMyLessons(
+    @Query('conversationId') conversationId: string | undefined,
+    @Request() req: AuthenticatedRequest,
+  ) {
     const userId = req.user.userId;
-    return await this.progressService.getMyLessons(userId);
+    return await this.progressService.getMyLessons(userId, conversationId);
+  }
+
+  @Post('lessons/:lessonId/status')
+  async updateLessonStatus(
+    @Param('lessonId') lessonId: string,
+    @Body() dto: UpdateLessonStatusDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    const userId = req.user.userId;
+    return await this.progressService.updateLessonStatus(
+      userId,
+      lessonId,
+      dto.status,
+    );
   }
 
   @Get('lessons/:lessonId')

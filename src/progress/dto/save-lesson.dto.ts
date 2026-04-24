@@ -1,6 +1,15 @@
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 
 export class SaveLessonDto {
+  @IsUUID('4', { message: 'conversationId must be a valid UUID.' })
+  conversationId!: string;
+
   @IsOptional()
   @IsString()
   documentId?: string;
@@ -12,4 +21,8 @@ export class SaveLessonDto {
   @IsString()
   @IsNotEmpty()
   contentText: string;
+
+  @IsOptional()
+  @IsIn(['IN_PROGRESS', 'COMPLETED'])
+  status?: 'IN_PROGRESS' | 'COMPLETED';
 }

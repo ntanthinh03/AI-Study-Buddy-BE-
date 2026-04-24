@@ -4,6 +4,7 @@ import { Repository, MoreThan } from 'typeorm';
 import { UserProgress } from './entities/user-progress.entity';
 import { Document } from '../documents/entities/document.entity';
 import { LearningLesson } from './entities/learning-lesson.entity';
+import { Conversation } from '../documents/entities/conversation.entity';
 import { SaveLessonDto } from './dto/save-lesson.dto';
 import { PROGRESS_MESSAGES } from '../common/constants/messages';
 
@@ -14,6 +15,8 @@ export class ProgressService {
     private progressRepository: Repository<UserProgress>,
     @InjectRepository(LearningLesson)
     private lessonRepository: Repository<LearningLesson>,
+    @InjectRepository(Conversation)
+    private conversationRepository: Repository<Conversation>,
   ) {}
 
   async getTimeline(userId: string) {
@@ -84,20 +87,34 @@ export class ProgressService {
   }
 
   async saveLesson(userId: string, dto: SaveLessonDto) {
+    const conversation = await this.conversationRepository.findOne({
+      where: { id: dto.conversationId, userId },
+    });
+
+    if (!conversation) {
+      throw new NotFoundException(PROGRESS_MESSAGES.CONVERSATION_NOT_FOUND);
+    }
+
     const lesson = this.lessonRepository.create({
       userId,
       documentId: dto.documentId ?? null,
+      conversationId: dto.conversationId,
       title: dto.title,
       contentText: dto.contentText,
+      status: dto.status ?? 'IN_PROGRESS',
+      completedAt: dto.status === 'COMPLETED' ? new Date() : null,
       lastStudiedAt: new Date(),
     });
 
     return await this.lessonRepository.save(lesson);
   }
 
-  async getMyLessons(userId: string) {
+  async getMyLessons(userId: string, conversationId?: string) {
     return await this.lessonRepository.find({
-      where: { userId },
+      where: {
+        userId,
+        ...(conversationId ? { conversationId } : {}),
+      },
       order: { updatedAt: 'DESC' },
     });
   }
@@ -131,6 +148,32 @@ export class ProgressService {
       message: PROGRESS_MESSAGES.LESSON_QUIZ_SAVED,
       lessonId: lesson.id,
       quizCount: Array.isArray(quiz) ? quiz.length : 0,
+    };
+  }
+
+  async updateLessonStatus(
+    userId: string,
+    lessonId: string,
+    status: 'IN_PROGRESS' | 'COMPLETED',
+  ) {
+    const lesson = await this.lessonRepository.findOne({
+      where: { id: lessonId, userId },
+    });
+
+    if (!lesson) {
+      throw new NotFoundException(PROGRESS_MESSAGES.LESSON_NOT_FOUND);
+    }
+
+    lesson.status = status;
+    lesson.completedAt = status === 'COMPLETED' ? new Date() : null;
+    lesson.lastStudiedAt = new Date();
+    await this.lessonRepository.save(lesson);
+
+    return {
+      message: PROGRESS_MESSAGES.LESSON_STATUS_UPDATED,
+      lessonId: lesson.id,
+      status: lesson.status,
+      completedAt: lesson.completedAt,
     };
   }
 }

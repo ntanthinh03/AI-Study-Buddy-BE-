@@ -81,6 +81,11 @@ Contract notes:
 - `POST /quizzes/generate/:documentId`
 - `GET /quizzes`
 
+Contract notes:
+
+- Quiz generate now returns `{ quizId, conversationId, questions }`.
+- `conversationId` should be reused by FE when creating lesson rows tied to the same thread.
+
 ### Progress
 
 - `GET /progress/me`
@@ -91,10 +96,14 @@ Contract notes:
 - `GET /progress/lessons`
 - `GET /progress/lessons/:lessonId`
 - `POST /progress/lessons/:lessonId/quiz`
+- `POST /progress/lessons/:lessonId/status`
 
 Contract notes:
 
 - `documentId` in `POST /progress/init` and `POST /progress/complete` must be a UUID document id from backend (not placeholders like `doc-001`).
+- `POST /progress/lessons` requires `conversationId` (UUID) owned by current user.
+- Lesson status values are `IN_PROGRESS` and `COMPLETED`.
+- Deleting a conversation removes linked messages, quizzes, and lessons in DB.
 
 ## Recommended FE Boot Sequence
 
