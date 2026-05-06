@@ -25,6 +25,9 @@ export class LearningLesson {
   @Column({ name: 'conversation_id', type: 'uuid', nullable: true })
   conversationId: string | null;
 
+  @Column({ name: 'course_name', type: 'text', nullable: true })
+  courseName: string | null;
+
   @Column({ name: 'title', type: 'text' })
   title: string;
 

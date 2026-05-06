@@ -86,6 +86,7 @@ Contract notes:
 - Quiz generate now returns `{ quizId, quizName, conversationId, questions }`.
 - `conversationId` should be reused by FE when creating lesson rows tied to the same thread.
 - `GET /quizzes` includes `quizName` for display in quiz lists.
+- UI should render quiz cards using `quizName`.
 
 ### Progress
 
@@ -105,6 +106,7 @@ Contract notes:
 - `POST /progress/lessons` requires `conversationId` (UUID) owned by current user.
 - Lesson status values are `IN_PROGRESS` and `COMPLETED`.
 - Deleting a conversation removes linked messages, quizzes, and lessons in DB.
+- Lesson rows include `courseName` for UI display.
 
 ## Recommended FE Boot Sequence
 
@@ -116,6 +118,7 @@ Contract notes:
 ## Focused Documents
 
 - **Data persistence guarantee**: [FE_DATA_PERSISTENCE_CONTRACT.md](FE_DATA_PERSISTENCE_CONTRACT.md) — When and how chat/quiz/lesson data is saved; cascade delete behavior
+- Quiz and lesson display names: [FE_DISPLAY_NAMES_NOTE.md](FE_DISPLAY_NAMES_NOTE.md)
 - Password flows: [FE_AUTH_PASSWORD_APIS.md](FE_AUTH_PASSWORD_APIS.md)
 - Conversation, quiz, and study plan rendering: [FE_CONVERSATION_HISTORY_QUIZ_PLAN.md](FE_CONVERSATION_HISTORY_QUIZ_PLAN.md)
 - Progress and lesson quiz payloads: [FE_PROGRESS_JSON_API_GUIDE.md](FE_PROGRESS_JSON_API_GUIDE.md)

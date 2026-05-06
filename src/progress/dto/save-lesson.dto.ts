@@ -14,6 +14,10 @@ export class SaveLessonDto {
   @IsString()
   documentId?: string;
 
+  @IsOptional()
+  @IsString()
+  courseName?: string;
+
   @IsString()
   @IsNotEmpty()
   title: string;

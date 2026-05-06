@@ -84,8 +84,8 @@ Every piece of data created within a conversation is automatically deleted **onl
    - Queryable via `GET /conversations/:conversationId/messages`
 
 2. **Lesson entity rows** (when lesson saved)
-   - Required fields: `title`, `contentText`, `conversationId`, `status` (default `IN_PROGRESS`)
-   - Optional fields: `documentId`, `quiz`, `completedAt`
+  - Required fields: `title`, `contentText`, `conversationId`, `status` (default `IN_PROGRESS`)
+  - Optional fields: `courseName`, `documentId`, `quiz`, `completedAt`
    - Fields: `userId`, `conversationId`, `createdAt`, `updatedAt`
    - Queryable via `GET /progress/lessons` or `GET /progress/lessons?conversationId=...`
 
@@ -95,6 +95,7 @@ POST /progress/lessons
 
 {
   "conversationId": "1be47916-a7f8-4172-98cd-1684a5f2d13a",
+  "courseName": "Database Fundamentals",
   "documentId": "8f7f4d7a-9f9e-4c97-b1e2-c6f9f5e5b0e1",
   "title": "Lesson 1: Database Fundamentals",
   "contentText": "Learn about relational databases...",
@@ -107,6 +108,7 @@ POST /progress/lessons
 {
   "id": "lesson-uuid-1234",
   "userId": "user-uuid",
+  "courseName": "Database Fundamentals",
   "conversationId": "1be47916-a7f8-4172-98cd-1684a5f2d13a",
   "title": "Lesson 1: Database Fundamentals",
   "contentText": "Learn about relational databases...",

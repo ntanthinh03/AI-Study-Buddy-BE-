@@ -99,6 +99,8 @@ export class ProgressService {
       userId,
       documentId: dto.documentId ?? null,
       conversationId: dto.conversationId,
+      courseName:
+        dto.courseName?.trim() || conversation.title?.trim() || null,
       title: dto.title,
       contentText: dto.contentText,
       status: dto.status ?? 'IN_PROGRESS',
