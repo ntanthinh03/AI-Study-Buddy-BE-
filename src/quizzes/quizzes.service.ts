@@ -30,6 +30,8 @@ export class QuizzesService {
       throw new Error(QUIZ_MESSAGES.DOCUMENT_NO_EXTRACTABLE_TEXT);
     }
 
+    const quizName = this.buildQuizName(document.fileName);
+
     const questions = await this.aiService.generateQuiz(document.contentText);
 
     const artifactMessage = await this.documentsService.saveArtifactMessage(
@@ -45,10 +47,17 @@ export class QuizzesService {
       throw new Error('Failed to bind quiz to conversation.');
     }
 
-    const quiz = await this.saveQuiz(questions, documentId, userId, conversationId);
+    const quiz = await this.saveQuiz(
+      questions,
+      documentId,
+      userId,
+      conversationId,
+      quizName,
+    );
 
     return {
       quizId: quiz.id,
+      quizName: quiz.quizName,
       conversationId,
       questions,
     };
@@ -58,8 +67,10 @@ export class QuizzesService {
     documentId: string,
     userId: string,
     conversationId: string,
+    quizName: string,
   ) {
     const quiz = this.quizzesRepository.create({
+      quizName,
       questions,
       document: { id: documentId },
       user: { id: userId },
@@ -73,5 +84,10 @@ export class QuizzesService {
       relations: ['document', 'conversation'],
       order: { createdAt: 'DESC' },
     });
+  }
+
+  private buildQuizName(fileName: string) {
+    const baseName = fileName.trim().replace(/\.[^.]+$/, '');
+    return `Quiz - ${baseName}`;
   }
 }

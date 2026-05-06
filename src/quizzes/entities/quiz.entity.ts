@@ -15,6 +15,9 @@ export class Quiz {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
+  @Column({ name: 'quiz_name', type: 'text' })
+  quizName!: string;
+
   @Column({ type: 'jsonb' })
   questions!: any;
 

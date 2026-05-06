@@ -83,8 +83,9 @@ Contract notes:
 
 Contract notes:
 
-- Quiz generate now returns `{ quizId, conversationId, questions }`.
+- Quiz generate now returns `{ quizId, quizName, conversationId, questions }`.
 - `conversationId` should be reused by FE when creating lesson rows tied to the same thread.
+- `GET /quizzes` includes `quizName` for display in quiz lists.
 
 ### Progress
 

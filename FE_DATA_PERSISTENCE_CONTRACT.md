@@ -47,13 +47,14 @@ Every piece of data created within a conversation is automatically deleted **onl
    - Queryable via `GET /conversations/:conversationId/messages`
 
 2. **Quiz entity row** (separate table)
-   - Fields: `questions`, `conversationId`, `userId`, `documentId`, `createdAt`
+  - Fields: `quizName`, `questions`, `conversationId`, `userId`, `documentId`, `createdAt`
    - Queryable via `GET /quizzes`
 
 **Example response:**
 ```json
 {
   "quizId": "15bfb07f-56ab-49f0-8f41-39ca7f3f6c2b",
+  "quizName": "Quiz - Database Fundamentals",
   "conversationId": "1be47916-a7f8-4172-98cd-1684a5f2d13a",
   "questions": [
     {
