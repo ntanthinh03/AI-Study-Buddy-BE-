@@ -114,6 +114,7 @@ Contract notes:
 
 ## Focused Documents
 
+- **Data persistence guarantee**: [FE_DATA_PERSISTENCE_CONTRACT.md](FE_DATA_PERSISTENCE_CONTRACT.md) — When and how chat/quiz/lesson data is saved; cascade delete behavior
 - Password flows: [FE_AUTH_PASSWORD_APIS.md](FE_AUTH_PASSWORD_APIS.md)
 - Conversation, quiz, and study plan rendering: [FE_CONVERSATION_HISTORY_QUIZ_PLAN.md](FE_CONVERSATION_HISTORY_QUIZ_PLAN.md)
 - Progress and lesson quiz payloads: [FE_PROGRESS_JSON_API_GUIDE.md](FE_PROGRESS_JSON_API_GUIDE.md)
