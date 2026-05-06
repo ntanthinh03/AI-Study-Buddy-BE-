@@ -19,7 +19,7 @@ export class QuizzesController {
   @Post('generate/:documentId')
   async generateQuiz(
     @Param('documentId') documentId: string,
-    @Body() body: { quizName?: string },
+    @Body() body: { quizName?: string; quizTitle?: string },
     @Request() req: AuthenticatedRequest,
   ) {
     const userId = req.user.userId;
@@ -27,6 +27,7 @@ export class QuizzesController {
       documentId,
       userId,
       body?.quizName,
+      body?.quizTitle,
     );
   }
   @Get()

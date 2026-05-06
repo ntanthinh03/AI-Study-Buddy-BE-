@@ -108,17 +108,20 @@ export class ProgressService {
       lastStudiedAt: new Date(),
     });
 
-    return await this.lessonRepository.save(lesson);
+    const savedLesson = await this.lessonRepository.save(lesson);
+    return this.formatLessonResponse(savedLesson);
   }
 
   async getMyLessons(userId: string, conversationId?: string) {
-    return await this.lessonRepository.find({
+    const lessons = await this.lessonRepository.find({
       where: {
         userId,
         ...(conversationId ? { conversationId } : {}),
       },
       order: { updatedAt: 'DESC' },
     });
+
+    return lessons.map((lesson) => this.formatLessonResponse(lesson));
   }
 
   async getLessonById(userId: string, lessonId: string) {
@@ -130,7 +133,7 @@ export class ProgressService {
       throw new NotFoundException(PROGRESS_MESSAGES.LESSON_NOT_FOUND);
     }
 
-    return lesson;
+    return this.formatLessonResponse(lesson);
   }
 
   async saveLessonQuiz(userId: string, lessonId: string, quiz: unknown[]) {
@@ -176,6 +179,23 @@ export class ProgressService {
       lessonId: lesson.id,
       status: lesson.status,
       completedAt: lesson.completedAt,
+    };
+  }
+
+  private formatLessonResponse(lesson: LearningLesson) {
+    return {
+      lessonId: lesson.id,
+      courseName: lesson.courseName,
+      lessonTitle: lesson.title,
+      title: lesson.title,
+      contentText: lesson.contentText,
+      status: lesson.status,
+      completedAt: lesson.completedAt,
+      conversationId: lesson.conversationId,
+      documentId: lesson.documentId,
+      quizJson: lesson.quizJson,
+      createdAt: lesson.createdAt,
+      updatedAt: lesson.updatedAt,
     };
   }
 }

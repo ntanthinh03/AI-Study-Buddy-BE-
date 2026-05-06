@@ -43,7 +43,9 @@ Every piece of data created within a conversation is automatically deleted **onl
 
 **Optional FE-sent display name:**
 - `quizName` can be sent by FE when the AI already created a label.
+- `quizTitle` can be sent by FE when the AI already created a specific quiz title.
 - If FE does not send `quizName`, backend falls back to `Quiz - <document name>`.
+- If FE does not send `quizTitle`, backend falls back to `<document name> Quiz`.
 
 **Data saved:**
 1. **Chat message row** (artifact type)
@@ -51,7 +53,7 @@ Every piece of data created within a conversation is automatically deleted **onl
    - Queryable via `GET /conversations/:conversationId/messages`
 
 2. **Quiz entity row** (separate table)
-  - Fields: `quizName`, `questions`, `conversationId`, `userId`, `documentId`, `createdAt`
+  - Fields: `quizName`, `quizTitle`, `questions`, `conversationId`, `userId`, `documentId`, `createdAt`
    - Queryable via `GET /quizzes`
 
 **Example response:**
@@ -59,6 +61,7 @@ Every piece of data created within a conversation is automatically deleted **onl
 {
   "quizId": "15bfb07f-56ab-49f0-8f41-39ca7f3f6c2b",
   "quizName": "Quiz - Database Fundamentals",
+  "quizTitle": "Database Fundamentals Quiz",
   "conversationId": "1be47916-a7f8-4172-98cd-1684a5f2d13a",
   "questions": [
     {
@@ -114,11 +117,12 @@ POST /progress/lessons
 **Response:**
 ```json
 {
-  "id": "lesson-uuid-1234",
+  "lessonId": "lesson-uuid-1234",
   "userId": "user-uuid",
   "courseName": "Database Fundamentals",
-  "conversationId": "1be47916-a7f8-4172-98cd-1684a5f2d13a",
+  "lessonTitle": "Lesson 1: Database Fundamentals",
   "title": "Lesson 1: Database Fundamentals",
+  "conversationId": "1be47916-a7f8-4172-98cd-1684a5f2d13a",
   "contentText": "Learn about relational databases...",
   "status": "IN_PROGRESS",
   "completedAt": null,
@@ -131,6 +135,7 @@ POST /progress/lessons
 
 **Persistence trigger:**
 - `POST /progress/lessons/:lessonId/status` — Update lesson status
+- `GET /progress/lessons` and `GET /progress/lessons/:lessonId` return `courseName` and `lessonTitle` separately for UI display.
 
 **Data updated:**
 - Fields: `status` (one of `IN_PROGRESS`, `COMPLETED`), `completedAt` (set to current timestamp if status is `COMPLETED`)

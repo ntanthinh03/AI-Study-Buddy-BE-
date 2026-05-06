@@ -83,11 +83,12 @@ Contract notes:
 
 Contract notes:
 
-- Quiz generate now returns `{ quizId, quizName, conversationId, questions }`.
+- Quiz generate now returns `{ quizId, quizName, quizTitle, conversationId, questions }`.
 - `conversationId` should be reused by FE when creating lesson rows tied to the same thread.
 - `GET /quizzes` includes `quizName` for display in quiz lists.
 - UI should render quiz cards using `quizName`.
-- FE may send `quizName` in `POST /quizzes/generate/:documentId` to save the AI-generated label directly in DB.
+- UI may render the specific quiz label using `quizTitle`.
+- FE may send `quizName` and `quizTitle` in `POST /quizzes/generate/:documentId` to save AI-generated labels directly in DB.
 
 ### Progress
 
@@ -109,6 +110,7 @@ Contract notes:
 - Deleting a conversation removes linked messages, quizzes, and lessons in DB.
 - Lesson rows include `courseName` for UI display.
 - FE may send `courseName` in `POST /progress/lessons` to save the AI-generated course label directly in DB.
+- `GET /progress/lessons` returns both `courseName` and `lessonTitle` so UI can render course and lesson labels separately.
 
 ## Recommended FE Boot Sequence
 

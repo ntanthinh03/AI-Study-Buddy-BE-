@@ -19,6 +19,7 @@ export class QuizzesService {
     documentId: string,
     userId: string,
     quizNameFromFe?: string,
+    quizTitleFromFe?: string,
   ) {
     const document = await this.documentsService.findOne(documentId, userId);
 
@@ -36,6 +37,8 @@ export class QuizzesService {
 
     const quizName =
       quizNameFromFe?.trim() || this.buildQuizName(document.fileName);
+    const quizTitle =
+      quizTitleFromFe?.trim() || this.buildQuizTitle(document.fileName);
 
     const questions = await this.aiService.generateQuiz(document.contentText);
 
@@ -58,11 +61,13 @@ export class QuizzesService {
       userId,
       conversationId,
       quizName,
+      quizTitle,
     );
 
     return {
       quizId: quiz.id,
       quizName: quiz.quizName,
+      quizTitle: quiz.quizTitle,
       conversationId,
       questions,
     };
@@ -73,9 +78,11 @@ export class QuizzesService {
     userId: string,
     conversationId: string,
     quizName: string,
+    quizTitle: string,
   ) {
     const quiz = this.quizzesRepository.create({
       quizName,
+      quizTitle,
       questions,
       document: { id: documentId },
       user: { id: userId },
@@ -94,5 +101,10 @@ export class QuizzesService {
   private buildQuizName(fileName: string) {
     const baseName = fileName.trim().replace(/\.[^.]+$/, '');
     return `Quiz - ${baseName}`;
+  }
+
+  private buildQuizTitle(fileName: string) {
+    const baseName = fileName.trim().replace(/\.[^.]+$/, '');
+    return `${baseName} Quiz`;
   }
 }
