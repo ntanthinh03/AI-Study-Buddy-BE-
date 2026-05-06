@@ -86,6 +86,7 @@ Contract notes:
 - Quiz generate now returns `{ quizId, quizName, quizTitle, conversationId, questions }`.
 - `conversationId` should be reused by FE when creating lesson rows tied to the same thread.
 - `GET /quizzes` includes `quizName` for display in quiz lists.
+- `GET /quizzes` returns a normalized shape with `quizId`, `quizName`, and `quizTitle`.
 - UI should render quiz cards using `quizName`.
 - UI may render the specific quiz label using `quizTitle`.
 - FE may send `quizName` and `quizTitle` in `POST /quizzes/generate/:documentId` to save AI-generated labels directly in DB.

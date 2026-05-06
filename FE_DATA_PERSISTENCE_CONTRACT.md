@@ -56,6 +56,9 @@ Every piece of data created within a conversation is automatically deleted **onl
   - Fields: `quizName`, `quizTitle`, `questions`, `conversationId`, `userId`, `documentId`, `createdAt`
    - Queryable via `GET /quizzes`
 
+**Normalized response shape:**
+- `GET /quizzes` returns `quizId`, `quizName`, `quizTitle`, `documentId`, `conversationId`, `createdAt`, and `questions`.
+
 **Example response:**
 ```json
 {

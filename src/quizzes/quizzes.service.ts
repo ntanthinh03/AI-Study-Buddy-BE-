@@ -91,11 +91,13 @@ export class QuizzesService {
     return await this.quizzesRepository.save(quiz);
   }
   async findAllByUser(userId: string) {
-    return await this.quizzesRepository.find({
+    const quizzes = await this.quizzesRepository.find({
       where: { user: { id: userId } },
       relations: ['document', 'conversation'],
       order: { createdAt: 'DESC' },
     });
+
+    return quizzes.map((quiz) => this.formatQuizResponse(quiz));
   }
 
   private buildQuizName(fileName: string) {
@@ -106,5 +108,17 @@ export class QuizzesService {
   private buildQuizTitle(fileName: string) {
     const baseName = fileName.trim().replace(/\.[^.]+$/, '');
     return `${baseName} Quiz`;
+  }
+
+  private formatQuizResponse(quiz: Quiz) {
+    return {
+      quizId: quiz.id,
+      quizName: quiz.quizName,
+      quizTitle: quiz.quizTitle,
+      documentId: quiz.document?.id ?? null,
+      conversationId: quiz.conversation?.id ?? null,
+      questions: quiz.questions,
+      createdAt: quiz.createdAt,
+    };
   }
 }

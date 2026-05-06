@@ -11,6 +11,12 @@ Use these fields for UI labels:
 FE can send `quizName` and `courseName` from AI summary flows; backend persists them directly.
 FE can also send `quizTitle` for a more specific quiz label.
 
+Quiz list/detail responses also return:
+
+- `quizId`
+- `quizName`
+- `quizTitle`
+
 Lesson list/detail responses also return:
 
 - `courseName`
