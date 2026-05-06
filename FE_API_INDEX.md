@@ -87,6 +87,7 @@ Contract notes:
 - `conversationId` should be reused by FE when creating lesson rows tied to the same thread.
 - `GET /quizzes` includes `quizName` for display in quiz lists.
 - UI should render quiz cards using `quizName`.
+- FE may send `quizName` in `POST /quizzes/generate/:documentId` to save the AI-generated label directly in DB.
 
 ### Progress
 
@@ -107,6 +108,7 @@ Contract notes:
 - Lesson status values are `IN_PROGRESS` and `COMPLETED`.
 - Deleting a conversation removes linked messages, quizzes, and lessons in DB.
 - Lesson rows include `courseName` for UI display.
+- FE may send `courseName` in `POST /progress/lessons` to save the AI-generated course label directly in DB.
 
 ## Recommended FE Boot Sequence
 

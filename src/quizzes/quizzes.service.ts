@@ -15,7 +15,11 @@ export class QuizzesService {
     private readonly aiService: AIService,
   ) {}
 
-  async generateQuiz(documentId: string, userId: string) {
+  async generateQuiz(
+    documentId: string,
+    userId: string,
+    quizNameFromFe?: string,
+  ) {
     const document = await this.documentsService.findOne(documentId, userId);
 
     if (!document) {
@@ -30,7 +34,8 @@ export class QuizzesService {
       throw new Error(QUIZ_MESSAGES.DOCUMENT_NO_EXTRACTABLE_TEXT);
     }
 
-    const quizName = this.buildQuizName(document.fileName);
+    const quizName =
+      quizNameFromFe?.trim() || this.buildQuizName(document.fileName);
 
     const questions = await this.aiService.generateQuiz(document.contentText);
 

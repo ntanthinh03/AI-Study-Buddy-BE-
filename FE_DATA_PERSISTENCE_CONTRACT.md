@@ -41,6 +41,10 @@ Every piece of data created within a conversation is automatically deleted **onl
 **Persistence trigger:**
 - `POST /quizzes/generate/:documentId` — Generates quiz and saves artifact record + quiz entity row
 
+**Optional FE-sent display name:**
+- `quizName` can be sent by FE when the AI already created a label.
+- If FE does not send `quizName`, backend falls back to `Quiz - <document name>`.
+
 **Data saved:**
 1. **Chat message row** (artifact type)
    - Fields: `messageType: 'ARTIFACT'`, `artifactType: 'QUIZ'`, `artifactJson: [...questions]`, `conversationId`
@@ -88,6 +92,10 @@ Every piece of data created within a conversation is automatically deleted **onl
   - Optional fields: `courseName`, `documentId`, `quiz`, `completedAt`
    - Fields: `userId`, `conversationId`, `createdAt`, `updatedAt`
    - Queryable via `GET /progress/lessons` or `GET /progress/lessons?conversationId=...`
+
+**Optional FE-sent display name:**
+- `courseName` can be sent by FE when the AI already created a course label.
+- If FE does not send `courseName`, backend falls back to the conversation title.
 
 **Example lesson save:**
 ```json

@@ -7,4 +7,9 @@ Use these fields for UI labels:
 - Quiz: `quizName`
 - Lesson: `courseName`
 
-If a lesson has no explicit `courseName`, FE may fall back to `title`.
+FE can send `quizName` and `courseName` from AI summary flows; backend persists them directly.
+
+Fallbacks:
+
+- Quiz without `quizName` falls back to `Quiz - <document name>`.
+- Lesson without `courseName` falls back to conversation title.

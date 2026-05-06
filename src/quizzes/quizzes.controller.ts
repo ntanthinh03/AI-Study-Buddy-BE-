@@ -5,6 +5,7 @@ import {
   UseGuards,
   Request,
   Get,
+  Body,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { QuizzesService } from './quizzes.service';
@@ -18,10 +19,15 @@ export class QuizzesController {
   @Post('generate/:documentId')
   async generateQuiz(
     @Param('documentId') documentId: string,
+    @Body() body: { quizName?: string },
     @Request() req: AuthenticatedRequest,
   ) {
     const userId = req.user.userId;
-    return await this.quizzesService.generateQuiz(documentId, userId);
+    return await this.quizzesService.generateQuiz(
+      documentId,
+      userId,
+      body?.quizName,
+    );
   }
   @Get()
   @UseGuards(AuthGuard('jwt'))
