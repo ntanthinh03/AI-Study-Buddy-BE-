@@ -16,6 +16,8 @@ Lesson list/detail responses also return:
 - `courseName`
 - `lessonTitle`
 
+The UI should use `lessonTitle` instead of the legacy `title` field.
+
 Fallbacks:
 
 - Quiz without `quizName` falls back to `Quiz - <document name>`.

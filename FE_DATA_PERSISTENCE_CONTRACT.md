@@ -121,7 +121,6 @@ POST /progress/lessons
   "userId": "user-uuid",
   "courseName": "Database Fundamentals",
   "lessonTitle": "Lesson 1: Database Fundamentals",
-  "title": "Lesson 1: Database Fundamentals",
   "conversationId": "1be47916-a7f8-4172-98cd-1684a5f2d13a",
   "contentText": "Learn about relational databases...",
   "status": "IN_PROGRESS",
@@ -139,6 +138,7 @@ POST /progress/lessons
 
 **Data updated:**
 - Fields: `status` (one of `IN_PROGRESS`, `COMPLETED`), `completedAt` (set to current timestamp if status is `COMPLETED`)
+- `GET /progress/lessons` and `GET /progress/lessons/:lessonId` return the same lesson label shape with `lessonId`, `courseName`, and `lessonTitle`.
 
 **Example:**
 ```json

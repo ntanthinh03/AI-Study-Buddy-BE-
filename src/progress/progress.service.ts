@@ -187,7 +187,6 @@ export class ProgressService {
       lessonId: lesson.id,
       courseName: lesson.courseName,
       lessonTitle: lesson.title,
-      title: lesson.title,
       contentText: lesson.contentText,
       status: lesson.status,
       completedAt: lesson.completedAt,
