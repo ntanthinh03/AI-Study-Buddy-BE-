@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { normalizeOllamaBaseUrl } from '../common/config/ollama.config';
-import { AI_MESSAGES } from '../common/constants/messages';
-import { AI_PROMPTS } from '../common/constants/ai-prompts';
+import { normalizeOllamaBaseUrl } from '../config/ollama.config';
+import { AI_MESSAGES } from '../constants/messages';
+import { AI_PROMPTS } from '../constants/ai-prompts';
+import { RagService } from '../../modules/rag/rag.service';
 
 export interface QuizQuestion {
   question: string;
@@ -57,7 +58,10 @@ export class AIService {
   private readonly quizModel: string;
   private readonly visionModel: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly ragService: RagService,
+  ) {
     this.baseUrl = normalizeOllamaBaseUrl(
       this.configService.get<string>('OLLAMA_BASE_URL'),
     );
@@ -69,6 +73,40 @@ export class AIService {
     this.visionModel =
       this.configService.get<string>('OLLAMA_VISION_MODEL') ??
       'llama3.2-vision:11b';
+  }
+
+  /**
+   * General RAG-based response generation (from former AiService)
+   */
+  async generateRagResponse(question: string) {
+    try {
+      const { context, sources } = await this.ragService.getRelevantContext(question);
+
+      const prompt = `
+        <|system|>
+        You are an elite AI Study Buddy. Your task is to provide accurate, helpful, and concise answers based strictly on the provided context.
+        If the context does not contain the answer, politely inform the student.
+        <|end|>
+        <|user|>
+        Context: ${context}
+        Question: ${question}
+        <|end|>
+        <|assistant|>
+      `;
+
+      // Using the manual chat method for consistency across the service
+      const answer = await this.chat(this.textModel, [
+        { role: 'user', content: prompt }
+      ]);
+
+      return {
+        answer: answer.trim(),
+        sources: sources,
+      };
+    } catch (error: unknown) {
+      this.logger.error(`AI | RAG generation failed: ${error instanceof Error ? error.message : 'Unknown'}`);
+      throw new InternalServerErrorException(AI_MESSAGES.GENERATION_FAILED);
+    }
   }
 
   async generateSummary(text: string): Promise<string> {
@@ -163,16 +201,8 @@ export class AIService {
       const initialQuestions = this.normalizeQuizQuestions(
         this.extractJsonArray(rawText),
       );
-      const reviewedQuestions = await this.reviewQuizQuestions(
-        context,
-        initialQuestions,
-      );
 
-      if (reviewedQuestions.length === 0) {
-        throw new Error(AI_MESSAGES.QUIZ_OUTPUT_NOT_ARRAY);
-      }
-
-      return reviewedQuestions.slice(0, 5);
+      return initialQuestions.slice(0, 5);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`AI | quiz generation failed: ${message}`);
@@ -332,32 +362,6 @@ export class AIService {
         passScore,
       },
     };
-  }
-
-  private async reviewQuizQuestions(
-    context: string,
-    questions: QuizQuestion[],
-  ): Promise<QuizQuestion[]> {
-    if (questions.length === 0) {
-      return [];
-    }
-
-    const prompt = AI_PROMPTS.QUIZ_REVIEW_USER(
-      context,
-      JSON.stringify(questions),
-    );
-
-    const reviewedRaw = await this.chat(this.quizModel, [
-      {
-        role: 'system',
-        content: AI_PROMPTS.QUIZ_REVIEW_SYSTEM,
-      },
-      { role: 'user', content: prompt },
-    ]);
-
-    const reviewedArray = this.extractJsonArray(reviewedRaw);
-    const reviewedQuestions = this.normalizeQuizQuestions(reviewedArray);
-    return reviewedQuestions.length > 0 ? reviewedQuestions : questions;
   }
 
   private extractJsonArray(rawText: string): unknown[] {

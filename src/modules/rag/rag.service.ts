@@ -3,6 +3,7 @@ import {
   Logger,
   InternalServerErrorException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Ollama, OllamaEmbeddings } from '@langchain/ollama';
 import { PGVectorStore } from '@langchain/community/vectorstores/pgvector';
 import { MemoryVectorStore } from '@langchain/classic/vectorstores/memory';
@@ -25,26 +26,39 @@ interface VectorStoreLike {
 export class RagService {
   private readonly logger = new Logger(RagService.name);
   private memoryVectorStore: MemoryVectorStore | null = null;
-  private readonly ollamaBaseUrl = normalizeOllamaBaseUrl(
-    process.env.OLLAMA_BASE_URL,
-  );
-  private readonly ollamaVisionModel =
-    process.env.OLLAMA_VISION_MODEL ?? 'llama3.2-vision:11b';
+  private readonly ollamaBaseUrl: string;
+  private readonly ollamaVisionModel: string;
 
-  private model = new Ollama({
-    baseUrl: normalizeOllamaBaseUrl(process.env.OLLAMA_BASE_URL),
-    model: 'phi3:medium-128k',
-    temperature: 0.3,
-  });
+  private model: Ollama;
+  private embeddings: OllamaEmbeddings;
 
-  private embeddings = new OllamaEmbeddings({ model: 'bge-m3' });
+  constructor(private readonly configService: ConfigService) {
+    this.ollamaBaseUrl = normalizeOllamaBaseUrl(
+      this.configService.get<string>('OLLAMA_BASE_URL'),
+    );
+    this.ollamaVisionModel =
+      this.configService.get<string>('OLLAMA_VISION_MODEL') ??
+      'llama3.2-vision:11b';
 
-  private connectionOptions = {
-    postgresConnectionOptions: {
-      connectionString: process.env.DATABASE_URL,
-    },
-    tableName: 'english_knowledge',
-  };
+    this.model = new Ollama({
+      baseUrl: this.ollamaBaseUrl,
+      model: this.configService.get<string>('OLLAMA_TEXT_MODEL') ?? 'phi3:medium-128k',
+      temperature: 0.3,
+    });
+
+    this.embeddings = new OllamaEmbeddings({ 
+      model: this.configService.get<string>('OLLAMA_EMBEDDING_MODEL') ?? 'bge-m3' 
+    });
+  }
+
+  private get connectionOptions() {
+    return {
+      postgresConnectionOptions: {
+        connectionString: this.configService.get<string>('DATABASE_URL'),
+      },
+      tableName: 'english_knowledge',
+    };
+  }
 
   private async getVectorStore(): Promise<VectorStoreLike> {
     try {

@@ -21,6 +21,7 @@ export class Quiz {
   @Column({ name: 'quiz_title', type: 'text', nullable: true })
   quizTitle!: string | null;
 
+  // We store questions as JSONB for flexibility, bypassing the need for a separate quiz_questions table.
   @Column({ type: 'jsonb' })
   questions!: any;
 

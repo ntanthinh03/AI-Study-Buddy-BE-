@@ -9,7 +9,7 @@ import { IsNull, Repository } from 'typeorm';
 import { Document } from './entities/document.entity';
 import { ChatMessage } from './entities/chat-message.entity';
 import { Conversation, ConversationKind } from './entities/conversation.entity';
-import { AIService } from './ai.service';
+import { AIService } from '../common/services/ai.service';
 import { ProgressService } from '../progress/progress.service';
 import { RagService } from '../modules/rag/rag.service';
 import * as fs from 'fs';
@@ -305,11 +305,15 @@ export class DocumentsService {
   }
 
   async getConversationsByUser(userId: string) {
-    return await this.conversationRepository.find({
+    const conversations = await this.conversationRepository.find({
       where: { userId },
       relations: ['document'],
       order: { updatedAt: 'DESC' },
     });
+
+    return conversations.map((conversation) =>
+      this.formatConversationResponse(conversation),
+    );
   }
 
   async getConversationMessages(userId: string, conversationId: string) {
@@ -322,7 +326,7 @@ export class DocumentsService {
       return [];
     }
 
-    return await this.chatRepository
+    const messages = await this.chatRepository
       .createQueryBuilder('message')
       .leftJoin('message.conversation', 'conversation')
       .leftJoin('message.user', 'user')
@@ -330,6 +334,8 @@ export class DocumentsService {
       .andWhere('user.id = :userId', { userId })
       .orderBy('message.createdAt', 'ASC')
       .getMany();
+
+    return messages.map((message) => this.formatMessageResponse(message));
   }
 
   async removeConversation(userId: string, conversationId: string) {
@@ -520,5 +526,34 @@ export class DocumentsService {
 
     await this.documentsRepository.delete(id);
     return { message: DOCUMENT_MESSAGES.DOCUMENT_DELETED };
+  }
+
+  private formatConversationResponse(conversation: Conversation) {
+    return {
+      conversationId: conversation.id,
+      conversationTitle: conversation.title,
+      conversationKind: conversation.kind,
+      documentId: conversation.documentId,
+      lastMessagePreview: conversation.lastMessagePreview,
+      lastArtifactType: conversation.lastArtifactType,
+      lastMessageAt: conversation.lastMessageAt,
+      createdAt: conversation.createdAt,
+      updatedAt: conversation.updatedAt,
+    };
+  }
+
+  private formatMessageResponse(message: ChatMessage) {
+    return {
+      messageId: message.id,
+      conversationId: message.conversation?.id ?? null,
+      messageType: message.messageType,
+      artifactType: message.artifactType,
+      messageLabel:
+        message.question?.trim() || message.artifactType || 'Message',
+      question: message.question,
+      answer: message.answer,
+      artifactJson: message.artifactJson,
+      createdAt: message.createdAt,
+    };
   }
 }

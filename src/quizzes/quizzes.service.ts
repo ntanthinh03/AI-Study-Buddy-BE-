@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Quiz } from './entities/quiz.entity';
 import { DocumentsService } from '../documents/documents.service';
-import { AIService, type QuizQuestion } from '../documents/ai.service';
+import { AIService, type QuizQuestion } from '../common/services/ai.service';
 import { QUIZ_MESSAGES } from '../common/constants/messages';
 
 @Injectable()
@@ -72,7 +72,47 @@ export class QuizzesService {
       questions,
     };
   }
+
+  async saveFeQuiz(
+    userId: string,
+    documentId: string,
+    questions: QuizQuestion[],
+    quizName?: string,
+    quizTitle?: string,
+  ) {
+    const artifactMessage = await this.documentsService.saveArtifactMessage(
+      userId,
+      documentId,
+      'QUIZ',
+      questions,
+      'User generated quiz',
+    );
+
+    const conversationId = artifactMessage.conversation?.id;
+    if (!conversationId) {
+      throw new Error('Failed to bind quiz to conversation.');
+    }
+
+    const quiz = await this.saveQuiz(
+      questions,
+      documentId,
+      userId,
+      conversationId,
+      quizName || 'FE Generated Quiz',
+      quizTitle || 'Quiz',
+    );
+
+    return {
+      quizId: quiz.id,
+      quizName: quiz.quizName,
+      quizTitle: quiz.quizTitle,
+      conversationId,
+      questions,
+    };
+  }
+
   async saveQuiz(
+
     questions: QuizQuestion[],
     documentId: string,
     userId: string,

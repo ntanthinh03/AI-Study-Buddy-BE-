@@ -14,7 +14,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '@nestjs/passport';
 import { DocumentsService } from './documents.service';
-import { AIService } from './ai.service';
+import { AIService } from '../common/services/ai.service';
 import type { UploadedFile as UploadedPdfFile } from '../common/types/uploaded-file.type';
 import type { AuthenticatedRequest } from '../common/types/authenticated-request.type';
 import { DOCUMENT_MESSAGES } from '../common/constants/messages';

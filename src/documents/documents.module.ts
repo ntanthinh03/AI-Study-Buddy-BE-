@@ -3,7 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { DocumentsController } from './documents.controller';
 import { DocumentsService } from './documents.service';
 import { Document } from './entities/document.entity';
-import { AIService } from './ai.service';
+import { AIService } from '../common/services/ai.service';
 import { ProgressModule } from '../progress/progress.module';
 import { ChatMessage } from './entities/chat-message.entity';
 import { RagModule } from '../modules/rag/rag.module';
