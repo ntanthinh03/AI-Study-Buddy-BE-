@@ -128,3 +128,17 @@ Response examples:
 ## License
 
 MIT
+## Docs cleanup (2026-05-07)
+
+Removed legacy FE documentation files from the repository:
+
+- FE_API_INDEX.md
+- FE_AUTH_PASSWORD_APIS.md
+- FE_FORGOT_PASSWORD_OTP_APIS.md
+- FE_PROGRESS_JSON_API_GUIDE.md
+- FE_DATA_PERSISTENCE_CONTRACT.md
+- FE_BE_ALIGNMENT_RECOMMENDATIONS.md
+- FE_DISPLAY_NAMES_NOTE.md
+- postman/README_DELETE_CHAT_QUICK_TEST.md
+
+If you need any of these files, contact the frontend owner or check project backups.
