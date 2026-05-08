@@ -201,7 +201,12 @@ export class DocumentsService {
     });
 
     try {
-      await this.ragService.saveKnowledge(text, document.fileName);
+      await this.ragService.saveKnowledge(
+        text,
+        document.fileName,
+        document.user?.id || '',
+        document.id,
+      );
       await this.documentsRepository.update(document.id, {
         ragStatus: 'COMPLETED',
       });

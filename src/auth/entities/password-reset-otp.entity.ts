@@ -13,9 +13,9 @@ export class PasswordResetOtp {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @ManyToOne('User', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
-  user!: User;
+  user!: any;
 
   @Column({ name: 'requested_email' })
   requestedEmail!: string;

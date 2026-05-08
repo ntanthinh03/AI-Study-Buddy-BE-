@@ -113,6 +113,22 @@ export class DocumentsController {
     return { studyPlan: plan };
   }
 
+  @Post(':id/mindmap')
+  async generateMindMap(
+    @Param('id') id: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    const userId = req.user.userId;
+    const doc = await this.documentsService.findOne(id, userId);
+
+    if (!doc.contentText || doc.contentText.trim().length === 0) {
+      throw new BadRequestException('Document text is empty or not parsed yet.');
+    }
+
+    const nodes = await this.aiService.generateMindMap(doc.contentText);
+    return { nodes };
+  }
+
   @Get(':id/history')
   async getHistory(
     @Param('id') id: string,

@@ -13,9 +13,9 @@ export class PasswordReset {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => User, (user) => user.passwordResets, { onDelete: 'CASCADE' })
+  @ManyToOne('User', (user: any) => user.passwordResets, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
-  user: User;
+  user: any;
 
   @Column({ name: 'requested_email' })
   requestedEmail: string;

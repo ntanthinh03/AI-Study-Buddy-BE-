@@ -5,6 +5,9 @@ import { Quiz } from './entities/quiz.entity';
 import { DocumentsService } from '../documents/documents.service';
 import { AIService, type QuizQuestion } from '../common/services/ai.service';
 import { QUIZ_MESSAGES } from '../common/constants/messages';
+import { AnalyticsService } from '../modules/analytics/analytics.service';
+import { ActivityType } from '../modules/analytics/entities/study-activity.entity';
+import { User } from '../users/entities/user.entity';
 
 @Injectable()
 export class QuizzesService {
@@ -13,6 +16,7 @@ export class QuizzesService {
     private quizzesRepository: Repository<Quiz>,
     private readonly documentsService: DocumentsService,
     private readonly aiService: AIService,
+    private readonly analyticsService: AnalyticsService,
   ) {}
 
   async generateQuiz(
@@ -160,5 +164,30 @@ export class QuizzesService {
       questions: quiz.questions,
       createdAt: quiz.createdAt,
     };
+  }
+
+  async submitQuizResult(
+    user: User,
+    data: {
+      quizId: string;
+      score: number;
+      totalQuestions: number;
+      correctAnswers: number;
+      durationSeconds?: number;
+    },
+  ) {
+    const userId = (user as any).userId || user.id;
+    const quiz = await this.quizzesRepository.findOne({
+      where: { id: data.quizId, user: { id: userId } },
+      relations: ['document'],
+    });
+
+    return await this.analyticsService.logActivity({ id: userId } as any, ActivityType.QUIZ, {
+      score: data.score,
+      totalQuestions: data.totalQuestions,
+      correctAnswers: data.correctAnswers,
+      durationSeconds: data.durationSeconds,
+      metadata: { quizId: data.quizId, documentId: quiz?.document?.id },
+    });
   }
 }

@@ -14,7 +14,7 @@ import { normalizeOllamaBaseUrl } from '../../common/config/ollama.config';
 import { RAG_MESSAGES } from '../../common/constants/messages';
 import { AI_PROMPTS } from '../../common/constants/ai-prompts';
 
-type RagMetadata = { source?: string };
+type RagMetadata = { source?: string; userId?: string; documentId?: string };
 type RagDocument = Document<RagMetadata>;
 
 interface VectorStoreLike {
@@ -175,19 +175,34 @@ export class RagService {
       sources: [...new Set(docs.map((d) => d.metadata.source || 'Unknown'))],
     };
   }
-  async answerQuestion(userQuery: string) {
+  async answerQuestion(userQuery: string, userId: string, documentId?: string) {
     try {
       const vectorStore = await this.getVectorStore();
-      const relevantDocs = await vectorStore.similaritySearch(userQuery, 5);
+      
+      const relevantDocs = await vectorStore.similaritySearch(userQuery, 10);
+      
+      const filteredDocs = relevantDocs.filter(doc => {
+        const metadata = doc.metadata as any;
+        const matchesUser = metadata.userId === userId;
+        const matchesDoc = !documentId || metadata.documentId === documentId;
+        return matchesUser && matchesDoc;
+      }).slice(0, 5);
 
-      if (relevantDocs.length === 0)
-        return { answer: 'No info found.', sources: [] };
+      if (filteredDocs.length === 0)
+        return { answer: 'I couldn\'t find any specific information in your documents to answer this.', sources: [] };
 
-      const contextText = relevantDocs
-        .map((doc) => doc.pageContent)
+      const contextText = filteredDocs
+        .map((doc) => `[Source: ${(doc.metadata as any).source || 'Unknown'}] ${doc.pageContent}`)
         .join('\n\n');
 
-      const prompt = `Context: ${contextText}\n\nQuestion: ${userQuery}`;
+      const prompt = `You are an AI Study Buddy. Use the following context from the user's documents to answer their question. 
+If the answer is found in multiple documents, summarize them.
+If you don't know the answer, say you don't know.
+
+Context:
+${contextText}
+
+Question: ${userQuery}`;
 
       const response = await this.model.invoke(prompt);
       const answer = typeof response === 'string' ? response : String(response);
@@ -202,7 +217,7 @@ export class RagService {
       throw new InternalServerErrorException(RAG_MESSAGES.AI_PROCESSING_FAILED);
     }
   }
-  async saveKnowledge(text: string, source: string) {
+  async saveKnowledge(text: string, source: string, userId: string, documentId: string) {
     try {
       if (!text || text.trim().length === 0) {
         throw new Error(RAG_MESSAGES.INPUT_TEXT_EMPTY);
@@ -218,7 +233,7 @@ export class RagService {
         (chunk) =>
           new Document({
             pageContent: chunk,
-            metadata: { source: source },
+            metadata: { source, userId, documentId },
           }),
       );
 
@@ -232,7 +247,12 @@ export class RagService {
       throw new InternalServerErrorException(RAG_MESSAGES.TEXT_INGESTION_FAILED);
     }
   }
-  async processPdf(fileBuffer: Buffer, fileName: string) {
+  async processPdf(
+    fileBuffer: Buffer,
+    fileName: string,
+    userId: string,
+    documentId: string,
+  ) {
     try {
       if (!fileBuffer || fileBuffer.length === 0) {
         throw new Error(RAG_MESSAGES.UPLOADED_PDF_BUFFER_EMPTY);
@@ -254,7 +274,7 @@ export class RagService {
         (chunk) =>
           new Document({
             pageContent: chunk,
-            metadata: { source: fileName },
+            metadata: { source: fileName, userId, documentId },
           }),
       );
 
@@ -269,7 +289,13 @@ export class RagService {
     }
   }
 
-  async processImage(fileBuffer: Buffer, fileName: string, mimeType: string) {
+  async processImage(
+    fileBuffer: Buffer,
+    fileName: string,
+    mimeType: string,
+    userId: string,
+    documentId: string,
+  ) {
     try {
       if (!mimeType.startsWith('image/')) {
         throw new Error(RAG_MESSAGES.INVALID_IMAGE_MIME_TYPE);
@@ -284,7 +310,12 @@ export class RagService {
         throw new Error(RAG_MESSAGES.NO_EXTRACTABLE_TEXT_IN_IMAGE);
       }
 
-      return await this.saveKnowledge(extractedText, fileName);
+      return await this.saveKnowledge(
+        extractedText,
+        fileName,
+        userId,
+        documentId,
+      );
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`RAG | image ingest failed ${fileName}: ${message}`);

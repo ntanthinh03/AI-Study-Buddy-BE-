@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan } from 'typeorm';
 import { UserProgress } from './entities/user-progress.entity';
@@ -17,6 +17,8 @@ export class ProgressService {
     private lessonRepository: Repository<LearningLesson>,
     @InjectRepository(Conversation)
     private conversationRepository: Repository<Conversation>,
+    @InjectRepository(Document)
+    private documentRepository: Repository<Document>,
   ) {}
 
   async getTimeline(userId: string) {
@@ -33,11 +35,18 @@ export class ProgressService {
 
     if (existing) return existing;
 
+    const doc = await this.documentRepository.findOne({ where: { id: documentId } });
+    if (!doc) {
+      throw new BadRequestException(
+        `Document with id "${documentId}" does not exist. Cannot initialize progress for a non-existent document.`,
+      );
+    }
+
     const count = await this.progressRepository.count({ where: { userId } });
 
     const newProgress = this.progressRepository.create({
       userId,
-      document: { id: documentId } as Document,
+      document: doc,
       isCompleted: false,
       isLocked: count > 0,
     });

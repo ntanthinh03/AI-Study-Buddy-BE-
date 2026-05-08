@@ -21,16 +21,15 @@ export class Quiz {
   @Column({ name: 'quiz_title', type: 'text', nullable: true })
   quizTitle!: string | null;
 
-  // We store questions as JSONB for flexibility, bypassing the need for a separate quiz_questions table.
   @Column({ type: 'jsonb' })
   questions!: any;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 
-  @ManyToOne(() => User, (user) => user.quizzes, { onDelete: 'CASCADE' })
+  @ManyToOne('User', (user: any) => user.quizzes, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
-  user!: User;
+  user!: any;
 
   @ManyToOne(() => Document, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'document_id' })

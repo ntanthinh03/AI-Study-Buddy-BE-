@@ -46,14 +46,14 @@ export class Conversation {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt!: Date;
 
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @ManyToOne('User', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
-  user!: User;
+  user!: any;
 
   @ManyToOne(() => Document, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'document_id' })
   document!: Document | null;
 
-  @OneToMany(() => ChatMessage, (message) => message.conversation)
-  messages!: ChatMessage[];
+  @OneToMany('ChatMessage', (message: any) => message.conversation)
+  messages!: any[];
 }

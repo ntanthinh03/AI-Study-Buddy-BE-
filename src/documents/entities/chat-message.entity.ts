@@ -50,17 +50,17 @@ export class ChatMessage {
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 
-  @ManyToOne(() => User)
+  @ManyToOne('User')
   @JoinColumn({ name: 'user_id' })
-  user!: User;
+  user!: any;
 
   @ManyToOne(() => Document, { nullable: true })
   @JoinColumn({ name: 'document_id' })
   document!: Document | null;
 
-  @ManyToOne(() => Conversation, (conversation) => conversation.messages, {
+  @ManyToOne('Conversation', (conversation: any) => conversation.messages, {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'conversation_id' })
-  conversation!: Conversation;
+  conversation!: any;
 }

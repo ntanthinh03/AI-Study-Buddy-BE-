@@ -40,7 +40,7 @@ export class Document {
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 
-  @ManyToOne(() => User, (user) => user.documents, { onDelete: 'CASCADE' })
+  @ManyToOne('User', 'documents', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
-  user!: User;
+  user!: any; // Use any or a specific interface to avoid circular type issues at runtime
 }

@@ -9,6 +9,11 @@ import { ProgressModule } from './progress/progress.module';
 import { ChatModule } from './chat/chat.module';
 import { RagModule } from './modules/rag/rag.module';
 import { AiModule } from './modules/ai/ai.module';
+import { FlashcardsModule } from './modules/flashcards/flashcards.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { StudySessionsModule } from './modules/study-sessions/study-sessions.module';
+import { StudyRoomsModule } from './modules/study-rooms/study-rooms.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
@@ -27,7 +32,7 @@ import { AiModule } from './modules/ai/ai.module';
         username: configService.get<string>('DB_USERNAME') ?? 'postgres',
         password: configService.get<string>('DB_PASSWORD') ?? '1',
         database: configService.get<string>('DB_DATABASE') ?? 'postgres',
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
+        entities: [__dirname + ' *.entity{.ts,.js}'],
         autoLoadEntities: true,
         synchronize: true,
       }),
@@ -41,6 +46,11 @@ import { AiModule } from './modules/ai/ai.module';
     ChatModule,
     RagModule,
     AiModule,
+    FlashcardsModule,
+    AnalyticsModule,
+    StudySessionsModule,
+    StudyRoomsModule,
+    ScheduleModule.forRoot(),
   ],
   controllers: [],
   providers: [],

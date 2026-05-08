@@ -10,6 +10,8 @@ import { Document } from '../../documents/entities/document.entity';
 import { Quiz } from '../../quizzes/entities/quiz.entity';
 import { PasswordReset } from '../../auth/entities/password-reset.entity';
 import { PasswordResetOtp } from '../../auth/entities/password-reset-otp.entity';
+import { Flashcard } from '../../modules/flashcards/entities/flashcard.entity';
+import { StudyActivity } from '../../modules/analytics/entities/study-activity.entity';
 
 @Entity('users')
 export class User {
@@ -48,6 +50,12 @@ export class User {
 
   @OneToMany(() => PasswordResetOtp, (passwordResetOtp) => passwordResetOtp.user)
   passwordResetOtps!: PasswordResetOtp[];
+
+  @OneToMany(() => Flashcard, (flashcard) => flashcard.user)
+  flashcards!: Flashcard[];
+
+  @OneToMany(() => StudyActivity, (activity) => activity.user)
+  studyActivities!: StudyActivity[];
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;

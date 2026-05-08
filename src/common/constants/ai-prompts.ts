@@ -39,12 +39,8 @@ Input image MIME type: ${mimeType}`,
 STRICT RULES:
 - Return only a valid JSON array.
 - No markdown, no code fences, no extra text.
-- Each question must test meaningful understanding, not trivial wording.
-- Exactly 4 options: A, B, C, D.
-- Exactly one correct answer key in correctAnswer.
-- correctAnswer must match the truly correct option based on the source.
-- explanation must briefly justify why the correct option is right and why common confusion may happen.
-- Avoid ambiguous, trick, or logically inconsistent questions.
+- Each question must have: 'question', 'options' (object with A, B, C, D), 'correctAnswer' (string: A, B, C, or D), 'explanation', and 'hint'.
+- Distractors (wrong options) must be plausible but clearly incorrect.
 
 Required format:
 [
@@ -52,49 +48,57 @@ Required format:
     "question": "...",
     "options": { "A": "...", "B": "...", "C": "...", "D": "..." },
     "correctAnswer": "A",
-    "explanation": "..."
+    "explanation": "...",
+    "hint": "..."
   }
 ]
 
 Source content:
 ${context}`,
-  QUIZ_REVIEW_SYSTEM:
-    'You review and correct quiz quality with strict factual consistency.',
-  QUIZ_REVIEW_USER: (context: string, questionsJson: string) => `You are a strict quiz reviewer.
 
-Task:
-- Review the questions below against the source content.
-- Fix any logical or factual mistakes.
-- Ensure each question has one correct answer only.
-- Keep exactly 5 items when possible.
-- Keep the same JSON schema.
-- Return only a valid JSON array and nothing else.
+  QUIZ_REVIEW_SYSTEM:
+    'You are a strict quiz reviewer. You ensure that the generated quiz matches the source content and the requested format.',
+  QUIZ_REVIEW_USER: (context: string, questionsJson: string) => `You are a strict quiz reviewer.
+Below is a source content and a generated quiz in JSON format.
+Review the quiz and ensure it is factually correct based ON ONLY the source content.
+If there are errors, fix them and return the corrected JSON array.
+If it is correct, return the original JSON array.
+Return ONLY the JSON array, no other text.
 
 Source content:
 ${context}
 
-Questions to review:
+Generated quiz:
 ${questionsJson}`,
 
   STUDY_PLAN_SYSTEM:
-    'You generate strict JSON study plans for learners. Always respond in English.',
+    'You are an expert academic counselor. You create structured, progressive study plans from academic documents. Always respond in English.',
   STUDY_PLAN_USER: (context: string, documentId: string) => `Create a study plan in valid JSON only.
-Schema:
+
+STRICT RULES:
+- Return ONLY a valid JSON object.
+- No markdown, no code fences, no extra text.
+- Divide the content into 3-5 logical modules (lessons).
+- Each module must have a title, objective, documentId, order, difficulty, and estimatedMinutes.
+- Use documentId exactly as provided.
+- First module should be IN_PROGRESS, remaining modules should be LOCKED.
+
+Required format:
 {
-  "planId": "string",
-  "title": "string",
-  "overview": "string",
+  "planId": "...",
+  "title": "...",
+  "overview": "...",
   "estimatedTotalMinutes": 0,
   "modules": [
     {
-      "moduleId": "string",
+      "moduleId": "...",
       "order": 1,
       "documentId": "${documentId}",
-      "title": "string",
-      "objective": "string",
+      "title": "...",
+      "objective": "...",
       "estimatedMinutes": 0,
-      "difficulty": "BEGINNER|INTERMEDIATE|ADVANCED",
-      "status": "LOCKED|IN_PROGRESS|COMPLETED",
+      "difficulty": "BEGINNER",
+      "status": "IN_PROGRESS",
       "quiz": {
         "recommendedQuestionCount": 5,
         "passScore": 70
@@ -102,13 +106,6 @@ Schema:
     }
   ]
 }
-Rules:
-- Output English only.
-- No markdown.
-- No code fences.
-- No extra text outside JSON.
-- Use documentId exactly as provided.
-- First module should be IN_PROGRESS, remaining modules should be LOCKED.
 
 Source content:
 ${context}`,
@@ -117,4 +114,83 @@ ${context}`,
     'You are an OCR assistant. Extract text from images accurately and return plain text only in English.',
   OCR_USER:
     'Extract all readable text from this image. Return plain text only, no markdown, no JSON.',
+
+  FLASHCARD_SYSTEM:
+    'You are a study assistant that generates educational flashcards. Always respond in English.',
+  FLASHCARD_USER: (context: string) => `Based on the source content below, generate at least 5-10 flashcards.
+Each flashcard should have a 'front' (question or term) and a 'back' (answer or definition).
+
+STRICT RULES:
+- Return only a valid JSON array.
+- No markdown, no code fences, no extra text.
+- Use simple and clear academic English.
+
+Required format:
+[
+  {
+    "front": "...",
+    "back": "..."
+  }
+]
+
+Source content:
+${context}`,
+
+  BATCH_GEN_SYSTEM:
+    'You are a high-speed study material generator. You generate both quizzes and flashcards simultaneously. Always respond in English.',
+  BATCH_GEN_USER: (context: string, quizCount: number, flashcardCount: number) => {
+    const quizReq = quizCount > 0 ? `exactly ${quizCount} quiz questions` : "";
+    const flashReq = flashcardCount > 0 ? `exactly ${flashcardCount} flashcards` : "";
+    const joinReq = [quizReq, flashReq].filter(Boolean).join(" and ");
+    
+    return `Based on the source content below, generate a batch of study materials: ${joinReq}.
+
+STRICT RULES:
+- Return ONLY a valid JSON object.
+- No markdown, no code fences, no extra text.
+- If a section count is 0, omit that key from the JSON or return an empty array for it.
+
+Required format:
+{
+  "quiz": [
+    {
+      "question": "...",
+      "options": { "A": "...", "B": "...", "C": "...", "D": "..." },
+      "correctAnswer": "A",
+      "explanation": "...",
+      "hint": "..."
+    }
+  ],
+  "flashcards": [
+    {
+      "front": "...",
+      "back": "..."
+    }
+  ]
+}
+
+Source content:
+${context}`;
+  },
+
+  MINDMAP_SYSTEM:
+    'You are an expert at extracting hierarchical information and visualizing it as a mind map. Always respond in English.',
+  MINDMAP_USER: (context: string) => `Analyze the provided source content and extract the key concepts into a hierarchical mind map structure.
+
+STRICT RULES:
+- Return ONLY a valid JSON array representing the nodes.
+- No markdown, no code fences, no extra text.
+- Each node must have: 'id' (unique string), 'label' (concise concept name), and optionally 'parentId' (id of the parent node).
+- The root node should represent the main topic and have no 'parentId'.
+
+Required format:
+[
+  { "id": "1", "label": "Main Topic" },
+  { "id": "2", "label": "Subtopic A", "parentId": "1" },
+  { "id": "3", "label": "Subtopic B", "parentId": "1" },
+  { "id": "4", "label": "Detail A1", "parentId": "2" }
+]
+
+Source content:
+${context}`,
 } as const;

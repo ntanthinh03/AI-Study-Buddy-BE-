@@ -75,9 +75,6 @@ export class AIService {
       'llama3.2-vision:11b';
   }
 
-  /**
-   * General RAG-based response generation (from former AiService)
-   */
   async generateRagResponse(question: string) {
     try {
       const { context, sources } = await this.ragService.getRelevantContext(question);
@@ -94,7 +91,6 @@ export class AIService {
         <|assistant|>
       `;
 
-      // Using the manual chat method for consistency across the service
       const answer = await this.chat(this.textModel, [
         { role: 'user', content: prompt }
       ]);
@@ -186,17 +182,21 @@ export class AIService {
   }
 
   async generateQuiz(text: string): Promise<QuizQuestion[]> {
-    const context = text.substring(0, 15000);
-    const prompt = AI_PROMPTS.QUIZ_USER(context);
+    const context = text.substring(0, 5000); // Giảm xuống 5000 để nhẹ máy hơn
+    const prompt = `Task: Based on the content below, generate 5 multiple-choice questions in English. 
+Return ONLY a JSON array. Each item: {"question": "...", "options": {"A": "...", "B": "...", "C": "...", "D": "..."}, "correctAnswer": "A", "explanation": "..."}.
+
+Content:
+${context}`;
 
     try {
+      this.logger.debug(`AI | Sending simplified prompt to ${this.quizModel}...`);
+      
       const rawText = await this.chat(this.quizModel, [
-        {
-          role: 'system',
-          content: AI_PROMPTS.QUIZ_SYSTEM,
-        },
         { role: 'user', content: prompt },
       ]);
+
+      this.logger.debug(`AI | Raw Quiz Response: ${rawText.substring(0, 500)}`);
 
       const initialQuestions = this.normalizeQuizQuestions(
         this.extractJsonArray(rawText),
@@ -206,7 +206,64 @@ export class AIService {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`AI | quiz generation failed: ${message}`);
+      return [];
+    }
+  }
+
+  async generateBatchQuestions(
+    text: string,
+    quizCount = 10,
+    flashcardCount = 10,
+  ): Promise<{ quizzes: QuizQuestion[]; flashcards: any[] }> {
+    const context = text.substring(0, 15000);
+    const prompt = AI_PROMPTS.BATCH_GEN_USER(context, quizCount, flashcardCount);
+
+    try {
+      const rawText = await this.chat(this.quizModel, [
+        {
+          role: 'system',
+          content: AI_PROMPTS.BATCH_GEN_SYSTEM,
+        },
+        { role: 'user', content: prompt },
+      ]);
+
+      const parsed = this.extractJsonObject(rawText);
+      const quizData = parsed.quizzes || parsed.quiz || [];
+      const quizzes = this.normalizeQuizQuestions(
+        Array.isArray(quizData) ? quizData : [],
+      );
+      const flashcards = Array.isArray(parsed.flashcards) ? parsed.flashcards : [];
+
+      if (quizzes.length === 0 && (quizCount > 0)) {
+        this.logger.warn(`AI | Batch generation returned 0 quizzes. Raw response snippet: ${rawText.substring(0, 200)}...`);
+      }
+
+      return { quizzes, flashcards };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`AI | batch generation failed: ${message}`);
       throw new Error(`${AI_MESSAGES.QUIZ_GENERATION_FAILED}${message}`);
+    }
+  }
+
+  async generateMindMap(text: string): Promise<any[]> {
+    const context = text.substring(0, 15000);
+    const prompt = AI_PROMPTS.MINDMAP_USER(context);
+
+    try {
+      const rawText = await this.chat(this.textModel, [
+        {
+          role: 'system',
+          content: AI_PROMPTS.MINDMAP_SYSTEM,
+        },
+        { role: 'user', content: prompt },
+      ]);
+
+      return this.extractJsonArray(rawText) as any[];
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`AI | mindmap generation failed: ${message}`);
+      throw new Error(`Mindmap generation failed: ${message}`);
     }
   }
 
@@ -365,17 +422,23 @@ export class AIService {
   }
 
   private extractJsonArray(rawText: string): unknown[] {
-    const jsonMatch = rawText.match(/\[[\s\S]*\]/);
+    const jsonMatch = rawText.match(/\[\s*\{[\s\S]*\}\s*\]/);
     if (!jsonMatch) {
-      throw new Error(AI_MESSAGES.NO_JSON_ARRAY);
+      // Thử tìm mảng đơn giản hơn nếu mảng phức tạp thất bại
+      const simplerMatch = rawText.match(/\[[\s\S]*\]/);
+      if (!simplerMatch) throw new Error(AI_MESSAGES.NO_JSON_ARRAY);
+      try {
+        return JSON.parse(simplerMatch[0]) as unknown[];
+      } catch {
+        throw new Error(AI_MESSAGES.QUIZ_OUTPUT_NOT_ARRAY);
+      }
     }
 
-    const parsed = JSON.parse(jsonMatch[0]) as unknown;
-    if (!Array.isArray(parsed)) {
+    try {
+      return JSON.parse(jsonMatch[0]) as unknown[];
+    } catch {
       throw new Error(AI_MESSAGES.QUIZ_OUTPUT_NOT_ARRAY);
     }
-
-    return parsed;
   }
 
   private normalizeQuizQuestions(input: unknown[]): QuizQuestion[] {
@@ -391,7 +454,7 @@ export class AIService {
       const question =
         typeof record.question === 'string' ? record.question.trim() : '';
       const explanation =
-        typeof record.explanation === 'string' ? record.explanation.trim() : '';
+        typeof record.explanation === 'string' ? record.explanation.trim() : 'No explanation provided.';
       const correctAnswer =
         typeof record.correctAnswer === 'string'
           ? record.correctAnswer.trim().toUpperCase()
@@ -400,9 +463,9 @@ export class AIService {
 
       if (
         !question ||
-        !explanation ||
         !['A', 'B', 'C', 'D'].includes(correctAnswer)
       ) {
+        this.logger.warn(`AI | Skipping invalid question structure: ${question.substring(0, 50)}...`);
         continue;
       }
 
@@ -467,6 +530,11 @@ export class AIService {
         model,
         messages,
         stream: false,
+        options: {
+          temperature: 0,
+          top_p: 0.1,
+          num_predict: 2000,
+        },
       }),
     });
   }

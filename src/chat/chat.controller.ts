@@ -14,6 +14,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '@nestjs/passport';
 import { ChatService } from './chat.service';
 import { DocumentsService } from '../documents/documents.service';
+import { RagService } from '../modules/rag/rag.service';
 import type { AuthenticatedRequest } from '../common/types/authenticated-request.type';
 import type { UploadedFile as UploadedChatImage } from '../common/types/uploaded-file.type';
 import { CHAT_MESSAGES } from '../common/constants/messages';
@@ -24,6 +25,7 @@ export class ChatController {
   constructor(
     private readonly chatService: ChatService,
     private readonly documentsService: DocumentsService,
+    private readonly ragService: RagService,
   ) {}
 
   @Post('ask')
@@ -40,9 +42,12 @@ export class ChatController {
       throw new BadRequestException(CHAT_MESSAGES.MESSAGE_REQUIRED);
     }
 
-    const answer = await this.chatService.getAIResponse(body.message);
+    const userId = req.user.userId;
+    
+    const { answer } = await this.ragService.answerQuestion(body.message, userId);
+    
     return await this.documentsService.saveGeneralMessage(
-      req.user.userId,
+      userId,
       body.message,
       answer,
       body.conversationId,

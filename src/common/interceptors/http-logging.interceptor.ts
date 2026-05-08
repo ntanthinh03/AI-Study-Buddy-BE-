@@ -93,7 +93,6 @@ export class HttpLoggingInterceptor implements NestInterceptor {
       return summary;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-base-to-string
     return String(value);
   }
 

@@ -7,5 +7,6 @@ import { RagModule } from '../rag/rag.module';
   imports: [RagModule],
   controllers: [AiController],
   providers: [AIService],
+  exports: [AIService],
 })
 export class AiModule {}

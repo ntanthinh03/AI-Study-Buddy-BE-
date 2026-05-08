@@ -48,9 +48,22 @@ export class QuizzesController {
   }
 
   @Get()
-  @UseGuards(AuthGuard('jwt'))
-  async findAll(@Request() req: AuthenticatedRequest) {
-    const userId = req.user.userId;
-    return await this.quizzesService.findAllByUser(userId);
+  async getQuizzes(@Request() req: AuthenticatedRequest) {
+    return await this.quizzesService.findAllByUser(req.user.userId);
+  }
+
+  @Post('submit')
+  async submitResult(
+    @Request() req: AuthenticatedRequest,
+    @Body()
+    data: {
+      quizId: string;
+      score: number;
+      totalQuestions: number;
+      correctAnswers: number;
+      durationSeconds?: number;
+    },
+  ) {
+    return await this.quizzesService.submitQuizResult(req.user as any, data);
   }
 }
