@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
 import { StudyActivity, ActivityType } from './entities/study-activity.entity';
@@ -6,6 +6,7 @@ import { User } from '../../users/entities/user.entity';
 
 @Injectable()
 export class AnalyticsService {
+  private readonly logger = new Logger(AnalyticsService.name);
   constructor(
     @InjectRepository(StudyActivity)
     private readonly activityRepository: Repository<StudyActivity>,
@@ -22,8 +23,14 @@ export class AnalyticsService {
       metadata?: any;
     },
   ) {
+    if (!user || !user.id) {
+      this.logger.warn('Analytics log skipped: missing user');
+      return null;
+    }
+
     const activity = this.activityRepository.create({
       user,
+      userId: user.id,
       type,
       score: data.score || 0,
       totalQuestions: data.totalQuestions || 0,
@@ -31,6 +38,7 @@ export class AnalyticsService {
       durationSeconds: data.durationSeconds || 0,
       metadata: data.metadata ? JSON.stringify(data.metadata) : undefined,
     });
+
     return await this.activityRepository.save(activity);
   }
 
@@ -84,9 +92,12 @@ export class AnalyticsService {
     }
 
     activities.forEach(a => {
-      const dateString = a.createdAt.toISOString().split('T')[0];
-      if (chartData[dateString] !== undefined) {
-          chartData[dateString] += a.correctAnswers;
+      const dateObj = typeof a.createdAt === 'string' ? new Date(a.createdAt) : a.createdAt;
+      if (dateObj && typeof dateObj.toISOString === 'function') {
+        const dateString = dateObj.toISOString().split('T')[0];
+        if (chartData[dateString] !== undefined) {
+            chartData[dateString] += a.correctAnswers;
+        }
       }
     });
 

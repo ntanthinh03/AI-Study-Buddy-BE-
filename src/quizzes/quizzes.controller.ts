@@ -32,6 +32,15 @@ export class QuizzesController {
     );
   }
 
+  @Post(':quizId/more')
+  async generateMoreQuestions(
+    @Param('quizId') quizId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    const userId = req.user.userId;
+    return await this.quizzesService.generateMoreQuestions(quizId, userId);
+  }
+
   @Post()
   async saveQuiz(
     @Body() createQuizDto: CreateQuizDto,

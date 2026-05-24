@@ -6,11 +6,13 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
-import { User } from '../../../users/entities/user.entity';
+import type { User } from '../../../users/entities/user.entity';
 import { Document } from '../../../documents/entities/document.entity';
 
 @Entity('flashcards')
+@Index(['user', 'nextReview'])
 export class Flashcard {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -31,7 +33,7 @@ export class Flashcard {
   @JoinColumn({ name: 'user_id' })
   user!: any;
 
-  @ManyToOne(() => Document, { onDelete: 'SET NULL', nullable: true })
+  @ManyToOne(() => Document, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'document_id' })
   document!: Document;
 

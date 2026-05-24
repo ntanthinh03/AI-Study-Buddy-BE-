@@ -175,29 +175,70 @@ export class RagService {
       sources: [...new Set(docs.map((d) => d.metadata.source || 'Unknown'))],
     };
   }
-  async answerQuestion(userQuery: string, userId: string, documentId?: string) {
+  async answerQuestion(
+    userQuery: string,
+    userId: string,
+    documentIds?: string[],
+    preComputedSummaries?: string[],
+  ) {
     try {
-      const vectorStore = await this.getVectorStore();
-      
-      const relevantDocs = await vectorStore.similaritySearch(userQuery, 10);
-      
-      const filteredDocs = relevantDocs.filter(doc => {
-        const metadata = doc.metadata as any;
-        const matchesUser = metadata.userId === userId;
-        const matchesDoc = !documentId || metadata.documentId === documentId;
-        return matchesUser && matchesDoc;
-      }).slice(0, 5);
+      let filteredDocs: RagDocument[] = [];
+      let contextText = '';
 
-      if (filteredDocs.length === 0)
-        return { answer: 'I couldn\'t find any specific information in your documents to answer this.', sources: [] };
+      const isSummary = (query: string): boolean => {
+        const q = query.toLowerCase().trim();
+        return (
+          q.includes('summarize') ||
+          q.includes('summary') ||
+          q.includes('tóm tắt') ||
+          q.includes('tom tat') ||
+          q.includes('sơ lược') ||
+          q.includes('so luoc') ||
+          q.includes('khái quát') ||
+          q.includes('khai quat')
+        );
+      };
 
-      const contextText = filteredDocs
-        .map((doc) => `[Source: ${(doc.metadata as any).source || 'Unknown'}] ${doc.pageContent}`)
-        .join('\n\n');
+      if (isSummary(userQuery) && preComputedSummaries && preComputedSummaries.length > 0) {
+        contextText = preComputedSummaries
+          .map((summary, idx) => `[Source: Document ${idx + 1} Summary] ${summary}`)
+          .join('\n\n');
+      } else {
+        const vectorStore = await this.getVectorStore();
+        
+        const k = (documentIds && documentIds.length > 0) ? 150 : 30;
+        const relevantDocs = await vectorStore.similaritySearch(userQuery, k);
+        
+        filteredDocs = relevantDocs.filter(doc => {
+          const metadata = doc.metadata as any;
+          const matchesUser = metadata.userId === userId;
+          const matchesDoc = !documentIds || documentIds.length === 0 || documentIds.includes(metadata.documentId);
+          return matchesUser && matchesDoc;
+        }).slice(0, 15);
 
-      const prompt = `You are an AI Study Buddy. Use the following context from the user's documents to answer their question. 
-If the answer is found in multiple documents, summarize them.
-If you don't know the answer, say you don't know.
+        if (filteredDocs.length === 0) {
+          return {
+            answer: 'I cannot find this information in the provided document. Please upload a more relevant PDF or provide more context.',
+            sources: [],
+          };
+        }
+
+        contextText = filteredDocs
+          .map((doc) => `[Source: ${(doc.metadata as any).source || 'Unknown'}] ${doc.pageContent}`)
+          .join('\n\n');
+      }
+
+      const prompt = `You are AI Study Buddy, an elite academic assistant. Use the following context extracted from the user's uploaded PDF documents to answer their question.
+STRICTLY answer based ONLY on the provided context below. DO NOT use any outside knowledge or hallucinate information.
+Always respond in English.
+
+If the question cannot be answered using the provided context, or if the information is missing, you must respond EXACTLY with:
+"I cannot find this information in the provided document. Please upload a more relevant PDF or provide more context."
+
+If the user asks for a quiz, you must include the exact text [GENERATE_QUIZ] in your response.
+If the user asks for flashcards, you must include the exact text [GENERATE_FLASHCARDS] in your response.
+If the user asks for a mind map, you must include the exact text [GENERATE_MINDMAP] in your response.
+If the user asks for a study plan, you must include the exact text [GENERATE_STUDY_PLAN] in your response.
 
 Context:
 ${contextText}
@@ -209,9 +250,9 @@ Question: ${userQuery}`;
 
       return {
         answer: answer.trim(),
-        sources: [
-          ...new Set(relevantDocs.map((d) => this.getSource(d.metadata))),
-        ],
+        sources: filteredDocs.length > 0
+          ? [...new Set(filteredDocs.map((d) => this.getSource(d.metadata)))]
+          : ['Document Summary'],
       };
     } catch {
       throw new InternalServerErrorException(RAG_MESSAGES.AI_PROCESSING_FAILED);

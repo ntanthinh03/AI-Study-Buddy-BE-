@@ -12,8 +12,10 @@ import { Conversation, ConversationKind } from './entities/conversation.entity';
 import { AIService } from '../common/services/ai.service';
 import { ProgressService } from '../progress/progress.service';
 import { RagService } from '../modules/rag/rag.service';
+import { Quiz } from '../quizzes/entities/quiz.entity';
+import { Flashcard } from '../modules/flashcards/entities/flashcard.entity';
 import * as fs from 'fs';
-import PDFParser from 'pdf2json';
+import { PDFParse } from 'pdf-parse';
 import { UploadedFile } from '../common/types/uploaded-file.type';
 import { DOCUMENT_MESSAGES } from '../common/constants/messages';
 
@@ -40,6 +42,12 @@ export class DocumentsService {
 
     @InjectRepository(Conversation)
     private conversationRepository: Repository<Conversation>,
+
+    @InjectRepository(Quiz)
+    private quizRepository: Repository<Quiz>,
+
+    @InjectRepository(Flashcard)
+    private flashcardRepository: Repository<Flashcard>,
 
     private aiService: AIService,
     private progressService: ProgressService,
@@ -94,44 +102,31 @@ export class DocumentsService {
   }
 
   async extractAndSummarize(document: Document, input: string | Buffer) {
-    const pdfParser = new PDFParser(null, true);
-
     try {
-      const extractedText = await new Promise<string>((resolve, reject) => {
-        pdfParser.on(
-          'pdfParser_dataError',
-          (errData: Error | PdfParserErrorData) => {
-            if (errData instanceof Error) {
-              reject(errData);
-              return;
-            }
+      let data: Buffer;
+      if (Buffer.isBuffer(input)) {
+        data = input;
+      } else {
+        data = fs.readFileSync(input);
+      }
 
-            reject(errData.parserError ?? new Error('PDF parser failed'));
-          },
-        );
-        pdfParser.on('pdfParser_dataReady', () =>
-          resolve(pdfParser.getRawTextContent()),
-        );
-
-        if (Buffer.isBuffer(input)) {
-          void pdfParser.parseBuffer(input);
-        } else {
-          void pdfParser.loadPDF(input);
-        }
-      });
+      const pdfParser = new PDFParse({ data });
+      const result = await pdfParser.getText();
+      const extractedText = result.text;
 
       if (!extractedText || extractedText.trim().length === 0) {
         throw new Error(DOCUMENT_MESSAGES.PDF_NO_EXTRACTABLE_TEXT);
       }
 
-      const cleanText = extractedText.substring(0, 15000);
+      const cleanText = extractedText;
       await this.documentsRepository.update(document.id, {
         contentText: cleanText,
         status: 'SUMMARIZING',
         summaryStatus: 'PROCESSING',
       });
 
-      const summary = await this.aiService.generateSummary(cleanText);
+      const summaryText = cleanText.substring(0, 15000);
+      const summary = await this.aiService.generateSummary(summaryText);
 
       await this.documentsRepository.update(document.id, {
         summary,
@@ -224,12 +219,15 @@ export class DocumentsService {
     docId: string,
     question: string,
     answer: string,
+    conversationId?: string,
   ) {
     const conversation = await this.upsertConversation(
       userId,
       docId,
       'CHAT',
       question,
+      null,
+      conversationId
     );
 
     return await this.chatRepository.save({
@@ -242,6 +240,34 @@ export class DocumentsService {
       document: { id: docId },
       conversation: { id: conversation.id },
     });
+  }
+
+  async getConversationDocumentIds(conversationId: string): Promise<string[]> {
+    const rows = await this.chatRepository
+      .createQueryBuilder('msg')
+      .select('DISTINCT msg.document_id', 'docId')
+      .where('msg.conversation_id = :conversationId', { conversationId })
+      .andWhere('msg.document_id IS NOT NULL')
+      .getRawMany();
+    return rows.map(r => r.docId);
+  }
+
+  async getAllConversationDocumentIds(conversationId: string, userId: string): Promise<string[]> {
+    const docIds = new Set<string>();
+
+    const conversation = await this.conversationRepository.findOne({
+      where: { id: conversationId, userId }
+    });
+    if (conversation && conversation.documentId) {
+      docIds.add(conversation.documentId);
+    }
+
+    const msgDocIds = await this.getConversationDocumentIds(conversationId);
+    for (const id of msgDocIds) {
+      if (id) docIds.add(id);
+    }
+
+    return Array.from(docIds);
   }
 
   async saveGeneralMessage(
@@ -285,19 +311,19 @@ export class DocumentsService {
   async saveArtifactMessage(
     userId: string,
     docId: string,
-    artifactType: 'QUIZ' | 'STUDY_PLAN',
+    artifactType: 'QUIZ' | 'STUDY_PLAN' | 'FLASHCARDS' | 'MINDMAP',
     artifactJson: unknown,
     note?: string,
   ) {
     const conversation = await this.upsertConversation(
       userId,
       docId,
-      artifactType === 'QUIZ' ? 'QUIZ' : 'PLAN',
+      'CHAT',
       note ?? null,
       artifactType,
     );
 
-    return await this.chatRepository.save({
+    const savedChat = await this.chatRepository.save({
       question: note ?? null,
       answer: null,
       messageType: 'ARTIFACT',
@@ -307,6 +333,38 @@ export class DocumentsService {
       document: { id: docId },
       conversation: { id: conversation.id },
     });
+
+    if (artifactType === 'QUIZ' && Array.isArray(artifactJson)) {
+      try {
+        await this.quizRepository.save({
+          quizName: note || 'Chat Generated Quiz',
+          quizTitle: 'Quiz',
+          questions: artifactJson as any[],
+          document: { id: docId },
+          user: { id: userId },
+          conversation: { id: conversation.id },
+        });
+      } catch (e) {
+        this.logger.error(`Failed to save quiz to DB: ${e instanceof Error ? e.message : 'Unknown'}`);
+      }
+    } else if (artifactType === 'FLASHCARDS' && Array.isArray(artifactJson)) {
+      try {
+        const flashcards = artifactJson.map((data: any) => {
+          const f = new Flashcard();
+          f.front = data.front || data.question || '';
+          f.back = data.back || data.answer || '';
+          f.user = { id: userId } as any;
+          f.document = { id: docId } as any;
+          f.nextReview = new Date();
+          return f;
+        });
+        await this.flashcardRepository.save(flashcards);
+      } catch (e) {
+        this.logger.error(`Failed to save flashcards to DB: ${e instanceof Error ? e.message : 'Unknown'}`);
+      }
+    }
+
+    return savedChat;
   }
 
   async getConversationsByUser(userId: string) {
@@ -333,6 +391,7 @@ export class DocumentsService {
 
     const messages = await this.chatRepository
       .createQueryBuilder('message')
+      .leftJoinAndSelect('message.document', 'document')
       .leftJoin('message.conversation', 'conversation')
       .leftJoin('message.user', 'user')
       .where('conversation.id = :conversationId', { conversationId })
@@ -352,7 +411,40 @@ export class DocumentsService {
       throw new NotFoundException(DOCUMENT_MESSAGES.CONVERSATION_NOT_FOUND);
     }
 
-    await this.conversationRepository.delete(conversation.id);
+    if (conversation.documentId) {
+      const document = await this.documentsRepository.findOne({
+        where: {
+          id: conversation.documentId,
+          user: { id: userId },
+        },
+      });
+
+      if (document?.filePath && fs.existsSync(document.filePath)) {
+        try {
+          fs.unlinkSync(document.filePath);
+        } catch (error: unknown) {
+          const message =
+            error instanceof Error ? error.message : 'Unknown error';
+          this.logger.warn(
+            `DOC | unable to delete local file ${document.filePath}: ${message}`,
+          );
+        }
+      }
+
+      await this.chatRepository
+        .createQueryBuilder()
+        .delete()
+        .from(ChatMessage)
+        .where('document_id = :documentId', {
+          documentId: conversation.documentId,
+        })
+        .execute();
+
+      await this.documentsRepository.delete(conversation.documentId);
+    } else {
+      await this.conversationRepository.delete(conversation.id);
+    }
+
     return { message: DOCUMENT_MESSAGES.CONVERSATION_DELETED };
   }
 
@@ -381,19 +473,91 @@ export class DocumentsService {
     };
   }
 
+  private isDefaultTitle(title: string | null | undefined, fileName?: string): boolean {
+    if (!title) return true;
+    const trimmed = title.trim();
+    if (
+      trimmed === '' ||
+      trimmed === 'Chat' ||
+      trimmed === 'Document Chat' ||
+      trimmed === 'General Chat' ||
+      trimmed === 'General Chat - null'
+    ) {
+      return true;
+    }
+    if (fileName && trimmed === fileName.trim()) return true;
+
+    const lower = trimmed.toLowerCase();
+    if (
+      lower.endsWith('.pdf') ||
+      lower.endsWith('.png') ||
+      lower.endsWith('.jpg') ||
+      lower.endsWith('.jpeg') ||
+      lower.endsWith('.webp')
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  private triggerBackgroundSmartTitle(conversationId: string, textToUse: string, type: string) {
+    if (!textToUse || textToUse.trim().length === 0) return;
+
+    void (async () => {
+      try {
+        let smartTitle = await this.aiService.generateSmartTitle(textToUse.substring(0, 5000), type);
+        if (smartTitle) {
+          smartTitle = smartTitle.replace(/^["']|["']$/g, '').trim();
+          if (smartTitle.length > 0 && !this.isDefaultTitle(smartTitle)) {
+            await this.conversationRepository.update(conversationId, { title: smartTitle });
+            this.logger.log(`DOC | Auto-renamed conversation ${conversationId} to: "${smartTitle}"`);
+          }
+        }
+      } catch (err) {
+        this.logger.error(`DOC | Failed to generate smart title for conversation ${conversationId}:`, err);
+      }
+    })();
+  }
+
+  async renameConversation(userId: string, conversationId: string, title: string) {
+    const conversation = await this.conversationRepository.findOne({
+      where: { id: conversationId, userId },
+      relations: ['document'],
+    });
+
+    if (!conversation) {
+      throw new NotFoundException(DOCUMENT_MESSAGES.CONVERSATION_NOT_FOUND);
+    }
+
+    conversation.title = title.replace(/^["']|["']$/g, '').trim();
+    const saved = await this.conversationRepository.save(conversation);
+    return this.formatConversationResponse(saved);
+  }
+
   private async upsertConversation(
     userId: string,
     docId: string,
     kind: ConversationKind,
     preview?: string | null,
-    artifactType?: 'QUIZ' | 'STUDY_PLAN' | null,
+    artifactType?: 'QUIZ' | 'STUDY_PLAN' | 'FLASHCARDS' | 'MINDMAP' | null,
+    conversationId?: string,
   ) {
     const document = await this.findOne(docId, userId);
     const title = document.fileName;
 
-    let conversation = await this.conversationRepository.findOne({
-      where: { userId, documentId: docId },
-    });
+    let conversation: Conversation | null = null;
+
+    if (conversationId) {
+      conversation = await this.conversationRepository.findOne({
+        where: { id: conversationId, userId },
+      });
+    }
+
+    if (!conversation) {
+      conversation = await this.conversationRepository.findOne({
+        where: { userId, documentId: docId },
+      });
+    }
 
     if (!conversation) {
       conversation = this.conversationRepository.create({
@@ -406,7 +570,12 @@ export class DocumentsService {
         lastMessageAt: new Date(),
       });
     } else {
-      conversation.title = title;
+      if (this.isDefaultTitle(conversation.title, document.fileName)) {
+        conversation.title = title;
+      }
+      if (!conversation.documentId) {
+        conversation.documentId = docId;
+      }
       conversation.kind =
         kind === 'CHAT' && conversation.kind !== 'CHAT'
           ? conversation.kind
@@ -418,7 +587,16 @@ export class DocumentsService {
       conversation.lastMessageAt = new Date();
     }
 
-    return await this.conversationRepository.save(conversation);
+    const savedConversation = await this.conversationRepository.save(conversation);
+
+    if (this.isDefaultTitle(savedConversation.title, document.fileName)) {
+      const textToUse = document.summary || document.contentText || '';
+      if (textToUse.trim().length > 0) {
+        this.triggerBackgroundSmartTitle(savedConversation.id, textToUse, 'Document Summary');
+      }
+    }
+
+    return savedConversation;
   }
 
   private async upsertGeneralConversation(
@@ -455,12 +633,21 @@ export class DocumentsService {
         lastMessageAt: new Date(),
       });
 
-      return await this.conversationRepository.save(conversation);
+      const savedConversation = await this.conversationRepository.save(conversation);
+      if (this.isDefaultTitle(savedConversation.title)) {
+        this.triggerBackgroundSmartTitle(savedConversation.id, preview, 'Chat');
+      }
+      return savedConversation;
     }
 
     conversation.lastMessagePreview = preview;
     conversation.lastMessageAt = new Date();
-    return await this.conversationRepository.save(conversation);
+    
+    const savedConversation = await this.conversationRepository.save(conversation);
+    if (this.isDefaultTitle(savedConversation.title)) {
+      this.triggerBackgroundSmartTitle(savedConversation.id, preview, 'Chat');
+    }
+    return savedConversation;
   }
 
   async createAndSaveStudyPlan(userId: string, docId: string) {
@@ -490,13 +677,18 @@ export class DocumentsService {
   }
 
   async getChatHistory(docId: string, userId: string) {
-    return await this.chatRepository.find({
+    const messages = await this.chatRepository.find({
       where: {
         document: { id: docId },
         user: { id: userId },
       },
+      relations: ['document'],
       order: { createdAt: 'ASC' },
     });
+    return messages.map(msg => ({
+      ...msg,
+      attachmentName: msg.document?.fileName ?? null,
+    }));
   }
 
   async findAllByUser(userId: string) {
@@ -558,6 +750,9 @@ export class DocumentsService {
       question: message.question,
       answer: message.answer,
       artifactJson: message.artifactJson,
+      imageMimeType: message.imageMimeType ?? null,
+      imageOriginalName: message.imageOriginalName ?? null,
+      attachmentName: message.document?.fileName ?? null,
       createdAt: message.createdAt,
     };
   }

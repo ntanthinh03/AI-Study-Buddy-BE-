@@ -1,7 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThan } from 'typeorm';
-import { UserProgress } from './entities/user-progress.entity';
+import { Repository } from 'typeorm';
 import { Document } from '../documents/entities/document.entity';
 import { LearningLesson } from './entities/learning-lesson.entity';
 import { Conversation } from '../documents/entities/conversation.entity';
@@ -11,8 +10,6 @@ import { PROGRESS_MESSAGES } from '../common/constants/messages';
 @Injectable()
 export class ProgressService {
   constructor(
-    @InjectRepository(UserProgress)
-    private progressRepository: Repository<UserProgress>,
     @InjectRepository(LearningLesson)
     private lessonRepository: Repository<LearningLesson>,
     @InjectRepository(Conversation)
@@ -20,80 +17,6 @@ export class ProgressService {
     @InjectRepository(Document)
     private documentRepository: Repository<Document>,
   ) {}
-
-  async getTimeline(userId: string) {
-    return await this.progressRepository.find({
-      where: { userId },
-      relations: ['document'],
-      order: { document: { createdAt: 'ASC' } },
-    });
-  }
-  async initializeProgress(userId: string, documentId: string) {
-    const existing = await this.progressRepository.findOne({
-      where: { userId, document: { id: documentId } },
-    });
-
-    if (existing) return existing;
-
-    const doc = await this.documentRepository.findOne({ where: { id: documentId } });
-    if (!doc) {
-      throw new BadRequestException(
-        `Document with id "${documentId}" does not exist. Cannot initialize progress for a non-existent document.`,
-      );
-    }
-
-    const count = await this.progressRepository.count({ where: { userId } });
-
-    const newProgress = this.progressRepository.create({
-      userId,
-      document: doc,
-      isCompleted: false,
-      isLocked: count > 0,
-    });
-
-    return await this.progressRepository.save(newProgress);
-  }
-
-  async getMyProgress(userId: string) {
-    return await this.progressRepository.find({
-      where: { userId },
-      relations: ['document'],
-      order: { document: { createdAt: 'ASC' } },
-    });
-  }
-  async unlockNextModule(userId: string, documentId: string, score: number) {
-    const currentProgress = await this.progressRepository.findOne({
-      where: { userId, document: { id: documentId } },
-      relations: ['document'],
-    });
-
-    if (currentProgress) {
-      currentProgress.isCompleted = true;
-      currentProgress.highestScore = score;
-      currentProgress.isLocked = false;
-      await this.progressRepository.save(currentProgress);
-
-      const nextProgress = await this.progressRepository.findOne({
-        where: {
-          userId,
-          isLocked: true,
-          document: { createdAt: MoreThan(currentProgress.document.createdAt) },
-        },
-        order: { document: { createdAt: 'ASC' } },
-      });
-
-      if (nextProgress) {
-        nextProgress.isLocked = false;
-        await this.progressRepository.save(nextProgress);
-        return {
-          message: PROGRESS_MESSAGES.NEXT_MODULE_UNLOCKED,
-          nextModule: nextProgress.id,
-        };
-      }
-    }
-
-    return { message: PROGRESS_MESSAGES.MODULE_UPDATED };
-  }
 
   async saveLesson(userId: string, dto: SaveLessonDto) {
     const conversation = await this.conversationRepository.findOne({

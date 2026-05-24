@@ -7,14 +7,16 @@ import {
   ManyToOne,
   JoinColumn,
   OneToMany,
+  Index,
 } from 'typeorm';
-import { User } from '../../users/entities/user.entity';
+import type { User } from '../../users/entities/user.entity';
 import { Document } from './document.entity';
 import { ChatMessage } from './chat-message.entity';
 
 export type ConversationKind = 'CHAT' | 'QUIZ' | 'PLAN';
 
 @Entity('conversations')
+@Index(['user'])
 export class Conversation {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -35,7 +37,7 @@ export class Conversation {
   lastMessagePreview!: string | null;
 
   @Column({ name: 'last_artifact_type', type: 'text', nullable: true })
-  lastArtifactType!: 'QUIZ' | 'STUDY_PLAN' | null;
+  lastArtifactType!: 'QUIZ' | 'STUDY_PLAN' | 'FLASHCARDS' | 'MINDMAP' | null;
 
   @Column({ name: 'last_message_at', type: 'timestamptz', nullable: true })
   lastMessageAt!: Date | null;

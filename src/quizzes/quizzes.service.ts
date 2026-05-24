@@ -77,6 +77,60 @@ export class QuizzesService {
     };
   }
 
+  async generateMoreQuestions(quizId: string, userId: string) {
+    const quiz = await this.quizzesRepository.findOne({
+      where: { id: quizId, user: { id: userId } },
+      relations: ['document'],
+    });
+
+    if (!quiz) {
+      throw new Error('Quiz not found');
+    }
+
+    const document = quiz.document;
+    if (!document) {
+      throw new Error('No document associated with this quiz.');
+    }
+
+    if (!document.contentText || document.contentText.trim().length === 0) {
+      throw new Error('Document has no extractable text for progressive generation.');
+    }
+
+    const existingQuestions = quiz.questions || [];
+    if (existingQuestions.length >= 20) {
+      return {
+        quizId,
+        questions: existingQuestions,
+        completed: true,
+      };
+    }
+
+    const nextQuestions = await this.aiService.generateMoreQuizQuestions(
+      document.contentText,
+      existingQuestions,
+    );
+
+    if (!nextQuestions || nextQuestions.length === 0) {
+      return {
+        quizId,
+        questions: existingQuestions,
+        completed: true,
+      };
+    }
+
+    const updatedQuestions = [...existingQuestions, ...nextQuestions];
+    const finalQuestions = updatedQuestions.slice(0, 20);
+
+    quiz.questions = finalQuestions;
+    await this.quizzesRepository.save(quiz);
+
+    return {
+      quizId,
+      questions: finalQuestions,
+      completed: finalQuestions.length >= 20 || nextQuestions.length < 5,
+    };
+  }
+
   async saveFeQuiz(
     userId: string,
     documentId: string,

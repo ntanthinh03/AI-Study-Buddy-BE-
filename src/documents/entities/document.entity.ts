@@ -5,10 +5,12 @@ import {
   CreateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
-import { User } from '../../users/entities/user.entity';
+import type { User } from '../../users/entities/user.entity';
 
 @Entity('documents')
+@Index(['user'])
 export class Document {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -42,5 +44,5 @@ export class Document {
 
   @ManyToOne('User', 'documents', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
-  user!: any; // Use any or a specific interface to avoid circular type issues at runtime
+  user!: any; 
 }

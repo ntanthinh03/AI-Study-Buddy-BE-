@@ -5,15 +5,17 @@ import {
   CreateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
-import { User } from '../../users/entities/user.entity';
+import type { User } from '../../users/entities/user.entity';
 import { Document } from './document.entity';
 import { Conversation } from './conversation.entity';
 
 export type ChatMessageType = 'QA' | 'ARTIFACT';
-export type ChatArtifactType = 'QUIZ' | 'STUDY_PLAN';
+export type ChatArtifactType = 'QUIZ' | 'STUDY_PLAN' | 'FLASHCARDS' | 'MINDMAP';
 
 @Entity('chat_messages')
+@Index(['conversation', 'createdAt'])
 export class ChatMessage {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -54,7 +56,7 @@ export class ChatMessage {
   @JoinColumn({ name: 'user_id' })
   user!: any;
 
-  @ManyToOne(() => Document, { nullable: true })
+  @ManyToOne(() => Document, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'document_id' })
   document!: Document | null;
 

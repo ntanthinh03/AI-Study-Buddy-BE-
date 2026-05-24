@@ -10,6 +10,7 @@ import { Document } from '../../documents/entities/document.entity';
 import { Flashcard } from '../flashcards/entities/flashcard.entity';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { ActivityType } from '../analytics/entities/study-activity.entity';
+import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
 export class StudySessionsService {
@@ -96,16 +97,16 @@ export class StudySessionsService {
       this.logger.log(`Document Content Length: ${document.contentText?.length || 0}`);
       this.logger.log(`Document Content Snippet: ${document.contentText?.substring(0, 200)}...`);
       
-      // Thử đợt 1: Tạo 10 câu trắc nghiệm
+      
       let questions = await this.aiService.generateQuiz(document.contentText || '');
       
-      // Nếu đợt 1 thất bại hoàn toàn, thử lại một lần nữa
+      
       if (questions.length === 0) {
         this.logger.warn(`AI failed first attempt for document ${documentId}, retrying...`);
         questions = await this.aiService.generateQuiz(document.contentText || '');
       }
 
-      // Thử tạo thêm một đợt nữa để đủ số lượng
+      
       if (questions.length < 15) {
         const extra = await this.aiService.generateQuiz(document.contentText || '');
         questions = [...questions, ...extra];
@@ -116,7 +117,7 @@ export class StudySessionsService {
         throw new Error('AI failed to generate questions for this document. The content might be too complex or short.');
       }
 
-      // Gán poolId là null vì đây là câu hỏi tạm thời
+      
       questionsData = questions.map(q => ({ 
         question: q.question,
         options: q.options,
@@ -177,13 +178,6 @@ export class StudySessionsService {
         .execute();
     }
 
-    const xpEarned = result.correctAnswers * 10 + 20;
-    session.status = SessionStatus.COMPLETED;
-    session.xpEarned = xpEarned;
-    session.correctAnswers = result.correctAnswers;
-    session.completedAt = new Date();
-    await this.sessionRepository.save(session);
-
     let stats = await this.statsRepository.findOne({ where: { user: { id: userId } } });
     if (!stats) {
       stats = this.statsRepository.create({
@@ -197,6 +191,19 @@ export class StudySessionsService {
       });
     }
 
+    let multiplier = 1.0;
+    if (stats.learningMode === 'CASUAL') multiplier = 0.8;
+    else if (stats.learningMode === 'INTENSE') multiplier = 1.5;
+
+    const baseXP = result.correctAnswers * 10 + 20;
+    const xpEarned = Math.round(baseXP * multiplier);
+
+    session.status = SessionStatus.COMPLETED;
+    session.xpEarned = xpEarned;
+    session.correctAnswers = result.correctAnswers;
+    session.completedAt = new Date();
+    await this.sessionRepository.save(session);
+
     const lastStudy = stats.lastStudyDate;
     const now = new Date();
     const isConsecutive = lastStudy && this.isNextDay(lastStudy, now);
@@ -206,7 +213,20 @@ export class StudySessionsService {
       if (isConsecutive || !lastStudy) {
         stats.currentStreak = (stats.currentStreak || 0) + 1;
       } else {
-        stats.currentStreak = 1;
+        const oneDayMs = 24 * 60 * 60 * 1000;
+        const lastZero = new Date(lastStudy);
+        lastZero.setHours(0, 0, 0, 0);
+        const nowZero = new Date(now);
+        nowZero.setHours(0, 0, 0, 0);
+        const daysMissed = Math.floor((nowZero.getTime() - lastZero.getTime()) / oneDayMs) - 1;
+
+        if (daysMissed > 0 && stats.streakFreezeAvailable >= daysMissed) {
+          stats.streakFreezeAvailable -= daysMissed;
+          stats.currentStreak = (stats.currentStreak || 0) + 1;
+        } else {
+          stats.currentStreak = 1;
+          stats.streakFreezeAvailable = 0;
+        }
       }
       stats.lastStudyDate = now;
     }
@@ -218,7 +238,7 @@ export class StudySessionsService {
     stats.totalXP = (stats.totalXP || 0) + xpEarned;
     stats.level = Math.floor(stats.totalXP / 1000) + 1;
 
-    // LOG TO ANALYTICS
+    
     await this.analyticsService.logActivity({ id: userId } as any, ActivityType.QUIZ, {
       score: (result.correctAnswers * 100) / (result.totalQuestions || 1),
       totalQuestions: result.totalQuestions,
@@ -263,10 +283,17 @@ export class StudySessionsService {
 
   async getUserStats(user: any): Promise<UserStats> {
     const userId = user?.userId ?? user?.id ?? user;
-    let stats = await this.statsRepository.findOne({ where: { user: { id: userId } } });
+    let stats = await this.statsRepository.findOne({
+      where: { user: { id: userId } },
+      relations: ['user'],
+    });
     if (!stats) {
       stats = this.statsRepository.create({ user: { id: userId } });
       await this.statsRepository.save(stats);
+      stats = await this.statsRepository.findOne({
+        where: { user: { id: userId } },
+        relations: ['user'],
+      });
     }
     return stats;
   }
@@ -292,14 +319,28 @@ export class StudySessionsService {
     const userId = user?.userId ?? user?.id ?? user;
     let stats = await this.statsRepository.findOne({ where: { user: { id: userId } } });
     if (!stats) {
-      stats = this.statsRepository.create({ user: { id: userId } });
+      stats = this.statsRepository.create({
+        user: { id: userId },
+        totalXP: 0,
+        currentStreak: 0,
+        longestStreak: 0,
+        level: 1,
+        totalFocusTime: 0,
+        lastStudyDate: null,
+      });
     }
 
     stats.totalFocusTime += minutes;
-    
-    const xpEarned = Math.floor((minutes / 25) * 20) + (minutes % 25 > 10 ? 5 : 0);
+
+    let multiplier = 1.0;
+    if (stats.learningMode === 'CASUAL') multiplier = 0.8;
+    else if (stats.learningMode === 'INTENSE') multiplier = 1.5;
+
+    const baseXP = Math.floor((minutes / 25) * 20) + (minutes % 25 > 10 ? 5 : 0);
+    const xpEarned = Math.round(baseXP * multiplier);
+
     if (xpEarned > 0) {
-      stats.totalXP += xpEarned;
+      stats.totalXP = (stats.totalXP || 0) + xpEarned;
       stats.level = Math.floor(stats.totalXP / 1000) + 1;
       
       const lastStudy = stats.lastStudyDate;
@@ -309,9 +350,22 @@ export class StudySessionsService {
 
       if (!isSameDay) {
         if (isConsecutive || !lastStudy) {
-          stats.currentStreak += 1;
+          stats.currentStreak = (stats.currentStreak || 0) + 1;
         } else {
-          stats.currentStreak = 1;
+          const oneDayMs = 24 * 60 * 60 * 1000;
+          const lastZero = new Date(lastStudy);
+          lastZero.setHours(0, 0, 0, 0);
+          const nowZero = new Date(now);
+          nowZero.setHours(0, 0, 0, 0);
+          const daysMissed = Math.floor((nowZero.getTime() - lastZero.getTime()) / oneDayMs) - 1;
+
+          if (daysMissed > 0 && stats.streakFreezeAvailable >= daysMissed) {
+            stats.streakFreezeAvailable -= daysMissed;
+            stats.currentStreak = (stats.currentStreak || 0) + 1;
+          } else {
+            stats.currentStreak = 1;
+            stats.streakFreezeAvailable = 0;
+          }
         }
         stats.lastStudyDate = now;
       }
@@ -320,7 +374,6 @@ export class StudySessionsService {
         stats.longestStreak = stats.currentStreak;
       }
 
-      // LOG TO ANALYTICS
       await this.analyticsService.logActivity({ id: userId } as any, ActivityType.FLASHCARD, {
         score: 100,
         durationSeconds: minutes * 60,
@@ -328,6 +381,85 @@ export class StudySessionsService {
       });
     }
 
+    return await this.statsRepository.save(stats);
+  }
+
+  @Cron('0 0 * * 1')
+  async resetWeeklyStreakFreezes() {
+    this.logger.log('Resetting weekly streak freezes...');
+    
+    await this.statsRepository
+      .createQueryBuilder()
+      .update()
+      .set({ streakFreezeAvailable: 0 })
+      .where('learning_mode = :casual', { casual: 'CASUAL' })
+      .execute();
+
+    await this.statsRepository
+      .createQueryBuilder()
+      .update()
+      .set({ streakFreezeAvailable: 1 })
+      .where('learning_mode = :balanced', { balanced: 'BALANCED' })
+      .execute();
+
+    await this.statsRepository
+      .createQueryBuilder()
+      .update()
+      .set({ streakFreezeAvailable: 2 })
+      .where('learning_mode = :intense', { intense: 'INTENSE' })
+      .execute();
+      
+    this.logger.log('Weekly streak freezes reset complete.');
+  }
+
+  async updateUserStatsSettings(
+    user: any,
+    settings: { learningMode?: string; preferredNotificationTime?: string },
+  ): Promise<UserStats> {
+    const userId = user?.userId ?? user?.id ?? user;
+    let stats = await this.statsRepository.findOne({ where: { user: { id: userId } } });
+    if (!stats) {
+      stats = this.statsRepository.create({
+        user: { id: userId },
+        totalXP: 0,
+        currentStreak: 0,
+        longestStreak: 0,
+        level: 1,
+        totalFocusTime: 0,
+        lastStudyDate: null,
+      });
+    }
+
+    if (settings.learningMode) {
+      stats.learningMode = settings.learningMode;
+      if (settings.learningMode === 'CASUAL') stats.streakFreezeAvailable = 0;
+      else if (settings.learningMode === 'BALANCED') stats.streakFreezeAvailable = 1;
+      else if (settings.learningMode === 'INTENSE') stats.streakFreezeAvailable = 2;
+    }
+
+    if (settings.preferredNotificationTime) {
+      stats.preferredNotificationTime = settings.preferredNotificationTime;
+    }
+
+    return await this.statsRepository.save(stats);
+  }
+
+  async updateFcmToken(user: any, fcmToken: string): Promise<UserStats> {
+    const userId = user?.userId ?? user?.id ?? user;
+    let stats = await this.statsRepository.findOne({ where: { user: { id: userId } } });
+    if (!stats) {
+      stats = this.statsRepository.create({
+        user: { id: userId },
+        totalXP: 0,
+        currentStreak: 0,
+        longestStreak: 0,
+        level: 1,
+        totalFocusTime: 0,
+        lastStudyDate: null,
+      });
+    }
+
+    stats.fcmToken = fcmToken;
     return await this.statsRepository.save(stats);
   }
 

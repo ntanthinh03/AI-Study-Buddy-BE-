@@ -5,16 +5,21 @@ import {
   CreateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
+  RelationId,
 } from 'typeorm';
-import { User } from '../../../users/entities/user.entity';
+import type { User } from '../../../users/entities/user.entity';
 
 export enum ActivityType {
   QUIZ = 'QUIZ',
   FLASHCARD = 'FLASHCARD',
   DOCUMENT_READ = 'DOCUMENT_READ',
+  MIND_MAP = 'MIND_MAP',
+  STUDY_PLAN = 'STUDY_PLAN',
 }
 
 @Entity('study_activities')
+@Index(['userId', 'createdAt'])
 export class StudyActivity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -23,6 +28,7 @@ export class StudyActivity {
   @JoinColumn({ name: 'user_id' })
   user: any;
 
+  @RelationId((activity: StudyActivity) => activity.user)
   @Column({ name: 'user_id' })
   userId: string;
 

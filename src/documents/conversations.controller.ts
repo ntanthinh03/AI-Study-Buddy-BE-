@@ -1,8 +1,10 @@
 import {
+  Body,
   Controller,
   Delete,
   Get,
   Param,
+  Patch,
   Request,
   UseGuards,
 } from '@nestjs/common';
@@ -31,6 +33,16 @@ export class ConversationsController {
       userId,
       conversationId,
     );
+  }
+
+  @Patch(':conversationId')
+  async renameConversation(
+    @Param('conversationId') conversationId: string,
+    @Body('title') title: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    const userId = req.user.userId;
+    return await this.documentsService.renameConversation(userId, conversationId, title);
   }
 
   @Delete(':conversationId')

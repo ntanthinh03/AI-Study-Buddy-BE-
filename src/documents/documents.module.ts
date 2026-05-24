@@ -9,10 +9,12 @@ import { ChatMessage } from './entities/chat-message.entity';
 import { RagModule } from '../modules/rag/rag.module';
 import { Conversation } from './entities/conversation.entity';
 import { ConversationsController } from './conversations.controller';
+import { Quiz } from '../quizzes/entities/quiz.entity';
+import { Flashcard } from '../modules/flashcards/entities/flashcard.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Document, ChatMessage, Conversation]),
+    TypeOrmModule.forFeature([Document, ChatMessage, Conversation, Quiz, Flashcard]),
     ProgressModule,
     RagModule,
   ],

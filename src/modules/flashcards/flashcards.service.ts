@@ -109,6 +109,7 @@ export class FlashcardsService {
     return await this.flashcardRepository.createQueryBuilder('flashcard')
       .where('flashcard.user_id = :userId', { userId: user.id })
       .andWhere('flashcard.next_review <= :now', { now })
+      .leftJoinAndSelect('flashcard.document', 'document')
       .getMany();
   }
 
@@ -152,7 +153,7 @@ export class FlashcardsService {
     return await this.flashcardRepository.save(flashcard);
   }
 
-  @Cron(CronExpression.EVERY_DAY_AT_9AM)
+  @Cron('0 9 * * *')
   async handleDailyReminder() {
     this.logger.log('Running daily study reminder CronJob...');
   }

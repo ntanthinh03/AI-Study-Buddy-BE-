@@ -17,10 +17,12 @@ export class StudyRoomsGateway implements OnGatewayConnection, OnGatewayDisconne
   private rooms: Map<string, Set<string>> = new Map();
   
   private quizStates: Map<string, {
+    hostId: string;
     questions: any[];
     currentQuestionIndex: number;
     scores: Map<string, number>;
     playerNames: Map<string, string>;
+    answeredPlayers: Set<string>;
   }> = new Map();
 
   handleConnection(client: Socket) {
@@ -48,10 +50,12 @@ export class StudyRoomsGateway implements OnGatewayConnection, OnGatewayDisconne
 
     if (!this.quizStates.has(roomCode)) {
       this.quizStates.set(roomCode, {
+        hostId: client.id,
         questions: [],
         currentQuestionIndex: -1,
         scores: new Map(),
-        playerNames: new Map()
+        playerNames: new Map(),
+        answeredPlayers: new Set()
       });
     }
     const state = this.quizStates.get(roomCode)!;
@@ -65,7 +69,7 @@ export class StudyRoomsGateway implements OnGatewayConnection, OnGatewayDisconne
     const rankings = this.getRankings(roomCode);
     client.emit('leaderboardUpdate', rankings);
 
-    return { event: 'joined', data: { roomCode } };
+    return { event: 'joined', data: { roomCode, isHost: state.hostId === client.id } };
   }
 
   private getRankings(roomCode: string) {
@@ -74,7 +78,7 @@ export class StudyRoomsGateway implements OnGatewayConnection, OnGatewayDisconne
     return Array.from(state.scores.entries()).map(([sid, score]) => ({
       username: state.playerNames.get(sid) || 'Unknown',
       score
-    })).sortedByDescending(it => it.score);
+    })).sort((a, b) => b.score - a.score);
   }
 
   private cleanupEmptyRooms() {
@@ -92,7 +96,10 @@ export class StudyRoomsGateway implements OnGatewayConnection, OnGatewayDisconne
     @MessageBody() data: { roomCode: string },
     @ConnectedSocket() client: Socket,
   ) {
-    this.server.to(data.roomCode).emit('materialSelectionStarted', { hostId: client.id });
+    const state = this.quizStates.get(data.roomCode);
+    if (state && state.hostId === client.id) {
+      this.server.to(data.roomCode).emit('materialSelectionStarted', { hostId: client.id });
+    }
   }
 
   @SubscribeMessage('materialSelected')
@@ -109,15 +116,18 @@ export class StudyRoomsGateway implements OnGatewayConnection, OnGatewayDisconne
     @ConnectedSocket() client: Socket,
   ) {
     const state = this.quizStates.get(data.roomCode);
-    if (state) {
+    if (state && state.hostId === client.id) {
       state.questions = data.questions;
       state.currentQuestionIndex = 0;
       state.scores.clear();
+      state.answeredPlayers.clear();
       this.rooms.get(data.roomCode)?.forEach(sid => state.scores.set(sid, 0));
 
+      const endsAt = Date.now() + 30000; // 30 seconds for first question
       this.server.to(data.roomCode).emit('quizStarted', { 
         totalQuestions: data.questions.length,
-        questions: data.questions // Gửi toàn bộ batch đầu tiên
+        questions: data.questions,
+        endsAt
       });
     }
   }
@@ -142,7 +152,9 @@ export class StudyRoomsGateway implements OnGatewayConnection, OnGatewayDisconne
     @ConnectedSocket() client: Socket,
   ) {
     const state = this.quizStates.get(data.roomCode);
-    if (!state || state.currentQuestionIndex === -1) return;
+    if (!state) return;
+    if (state.answeredPlayers.has(client.id)) return;
+    state.answeredPlayers.add(client.id);
 
     const currentQuestion = state.questions[state.currentQuestionIndex];
     const isCorrect = data.answer === currentQuestion.correctAnswer;
@@ -156,11 +168,13 @@ export class StudyRoomsGateway implements OnGatewayConnection, OnGatewayDisconne
       state.scores.set(client.id, currentScore + totalPoints);
     }
 
-    const rankings = Array.from(state.scores.entries()).map(([sid, score]) => ({
-      username: state.playerNames.get(sid) || 'Unknown',
-      score
-    })).sortedByDescending(it => it.score);
+    const totalInRoom = this.rooms.get(data.roomCode)?.size || 1;
+    this.server.to(data.roomCode).emit('answerProgress', {
+      answeredCount: state.answeredPlayers.size,
+      totalCount: totalInRoom
+    });
 
+    const rankings = this.getRankings(data.roomCode);
     this.server.to(data.roomCode).emit('leaderboardUpdate', rankings);
   }
 
@@ -170,19 +184,21 @@ export class StudyRoomsGateway implements OnGatewayConnection, OnGatewayDisconne
     @ConnectedSocket() client: Socket,
   ) {
     const state = this.quizStates.get(data.roomCode);
-    if (state && state.currentQuestionIndex < state.questions.length - 1) {
-      state.currentQuestionIndex++;
-      this.server.to(data.roomCode).emit('newQuestion', {
-        index: state.currentQuestionIndex,
-        question: state.questions[state.currentQuestionIndex]
-      });
-    } else if (state) {
-      this.server.to(data.roomCode).emit('quizEnded', {
-        finalRankings: Array.from(state.scores.entries()).map(([sid, score]) => ({
-          username: state.playerNames.get(sid) || 'Unknown',
-          score
-        })).sortedByDescending(it => it.score)
-      });
+    if (state && state.hostId === client.id) {
+      if (state.currentQuestionIndex < state.questions.length - 1) {
+        state.currentQuestionIndex++;
+        state.answeredPlayers.clear();
+        const endsAt = Date.now() + 30000;
+        this.server.to(data.roomCode).emit('newQuestion', {
+          index: state.currentQuestionIndex,
+          question: state.questions[state.currentQuestionIndex],
+          endsAt
+        });
+      } else {
+        this.server.to(data.roomCode).emit('quizEnded', {
+          finalRankings: this.getRankings(data.roomCode)
+        });
+      }
     }
   }
 
@@ -213,21 +229,4 @@ export class StudyRoomsGateway implements OnGatewayConnection, OnGatewayDisconne
       }
     }
   }
-}
-
-declare global {
-  interface Array<T> {
-    sortedByDescending<R>(selector: (item: T) => R): T[];
-  }
-}
-if (!Array.prototype.sortedByDescending) {
-  Array.prototype.sortedByDescending = function<T, R>(this: T[], selector: (item: T) => R): T[] {
-    return [...this].sort((a, b) => {
-      const va = selector(a);
-      const vb = selector(b);
-      if (va < vb) return 1;
-      if (va > vb) return -1;
-      return 0;
-    });
-  };
 }

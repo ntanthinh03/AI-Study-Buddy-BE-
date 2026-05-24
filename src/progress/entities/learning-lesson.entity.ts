@@ -6,12 +6,14 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { Conversation } from '../../documents/entities/conversation.entity';
 
 export type LessonStatus = 'IN_PROGRESS' | 'COMPLETED';
 
 @Entity('learning_lessons')
+@Index(['userId'])
 export class LearningLesson {
   @PrimaryGeneratedColumn('uuid')
   id: string;

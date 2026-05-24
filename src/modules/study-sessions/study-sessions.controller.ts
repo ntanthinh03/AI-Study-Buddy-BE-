@@ -49,4 +49,20 @@ export class StudySessionsController {
   getLeaderboard() {
     return this.studySessionsService.getLeaderboard();
   }
+
+  @Post('settings')
+  updateSettings(
+    @Body() settings: { learningMode?: string; preferredNotificationTime?: string },
+    @Request() req: any,
+  ) {
+    return this.studySessionsService.updateUserStatsSettings(req.user, settings);
+  }
+
+  @Post('fcm-token')
+  updateFcmToken(
+    @Body() body: { fcmToken: string },
+    @Request() req: any,
+  ) {
+    return this.studySessionsService.updateFcmToken(req.user, body.fcmToken);
+  }
 }

@@ -5,8 +5,9 @@ import {
   ManyToOne,
   JoinColumn,
   CreateDateColumn,
+  Index,
 } from 'typeorm';
-import { User } from '../../../users/entities/user.entity';
+import type { User } from '../../../users/entities/user.entity';
 
 export enum SessionStatus {
   IN_PROGRESS = 'IN_PROGRESS',
@@ -15,6 +16,7 @@ export enum SessionStatus {
 }
 
 @Entity('study_sessions')
+@Index(['user', 'createdAt'])
 export class StudySession {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
