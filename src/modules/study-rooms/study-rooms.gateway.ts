@@ -66,10 +66,14 @@ export class StudyRoomsGateway implements OnGatewayConnection, OnGatewayDisconne
 
     client.to(roomCode).emit('userJoined', { username: data.username, socketId: client.id });
     
+    const participants = Array.from(this.rooms.get(roomCode) || []).map(
+      sid => state.playerNames.get(sid) || 'Unknown'
+    );
+    
     const rankings = this.getRankings(roomCode);
     client.emit('leaderboardUpdate', rankings);
 
-    return { event: 'joined', data: { roomCode, isHost: state.hostId === client.id } };
+    return { event: 'joined', data: { roomCode, isHost: state.hostId === client.id, participants } };
   }
 
   private getRankings(roomCode: string) {
@@ -221,11 +225,16 @@ export class StudyRoomsGateway implements OnGatewayConnection, OnGatewayDisconne
   private leaveAllRooms(client: Socket) {
     for (const [roomCode, clients] of this.rooms.entries()) {
       if (clients.has(client.id)) {
-        clients.delete(client.id);
         const state = this.quizStates.get(roomCode);
+        const username = state?.playerNames.get(client.id) || 'Unknown';
+        clients.delete(client.id);
         state?.playerNames.delete(client.id);
         state?.scores.delete(client.id);
-        client.to(roomCode).emit('userLeft', { socketId: client.id });
+        
+        const participants = Array.from(clients).map(
+          sid => state?.playerNames.get(sid) || 'Unknown'
+        );
+        client.to(roomCode).emit('userLeft', { username, socketId: client.id, participants });
       }
     }
   }
