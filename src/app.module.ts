@@ -34,7 +34,7 @@ import { VersusArenaModule } from './modules/versus-arena/versus-arena.module';
         username: configService.get<string>('DB_USERNAME') ?? 'postgres',
         password: configService.get<string>('DB_PASSWORD') ?? '1',
         database: configService.get<string>('DB_DATABASE') ?? 'postgres',
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
+        entities: [__dirname + '*.entity{.ts,.js}'],
         autoLoadEntities: true,
         synchronize: true,
       }),

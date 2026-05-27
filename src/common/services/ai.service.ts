@@ -186,30 +186,75 @@ export class AIService {
 
   async generateQuiz(text: string): Promise<QuizQuestion[]> {
     const context = text.substring(0, 25000); 
-    const prompt = `Task: Based on the content below, generate 5 multiple-choice questions in English. 
-Return ONLY a JSON array. Each item: {"question": "...", "options": {"A": "...", "B": "...", "C": "...", "D": "..."}, "correctAnswer": "A", "explanation": "..."}.
+    const systemPrompt = `You are a strict quiz generator. You MUST ONLY create questions from information EXPLICITLY stated in the provided document content. NEVER use external knowledge, assumptions, or general facts that are not directly written in the content. Every question, every correct answer, and every distractor option must be directly verifiable from the provided text. If the content does not contain enough information, generate fewer questions. Return between 5 and 10 questions maximum. Quality and accuracy over quantity.`;
+    const prompt = `Based STRICTLY on the document content below, generate multiple-choice questions in English.
+CRITICAL RULES:
+- ONLY use facts, figures, definitions, and concepts that appear word-for-word or are directly stated in the content below.
+- Do NOT invent statistics, percentages, names, or any information not found in the content.
+- Each question must be answerable by reading the content.
+- If the content is short, generate only 5 questions. If it has rich detail, generate up to 10.
+- Return ONLY a valid JSON object containing a "questions" array.
+- Each item in the "questions" array: {"question": "...", "options": {"A": "...", "B": "...", "C": "...", "D": "..."}, "correctAnswer": "A", "explanation": "Based on the document: ..."}
+- If you cannot create a valid question from the content, do NOT create it.
 
-Content:
+Required format:
+{
+  "questions": [
+    {
+      "question": "...",
+      "options": { "A": "...", "B": "...", "C": "...", "D": "..." },
+      "correctAnswer": "A",
+      "explanation": "..."
+    }
+  ]
+}
+
+Document Content:
 ${context}`;
 
+    let rawText = '';
     try {
-      this.logger.debug(`AI | Sending simplified prompt to ${this.quizModel}...`);
+      this.logger.debug(`AI | Sending PDF-strict prompt to ${this.quizModel}...`);
       
-      const rawText = await this.chat(this.quizModel, [
+      rawText = await this.chat(this.quizModel, [
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: prompt },
-      ]);
+      ], 'json');
 
       this.logger.debug(`AI | Raw Quiz Response: ${rawText.substring(0, 500)}`);
 
-      const initialQuestions = this.normalizeQuizQuestions(
-        this.extractJsonArray(rawText),
-      );
+      let cleaned = rawText.trim();
+      if (cleaned.startsWith('```')) {
+        cleaned = cleaned.replace(/^```(json)?/, '').replace(/```$/, '').trim();
+      }
 
-      return initialQuestions.slice(0, 5);
+      let parsedArray: any[] = [];
+      if (cleaned.startsWith('[')) {
+        try {
+          parsedArray = JSON.parse(cleaned);
+        } catch (e) {}
+      } else if (cleaned.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(cleaned);
+          for (const key of Object.keys(parsed)) {
+            if (Array.isArray(parsed[key])) {
+              parsedArray = parsed[key];
+              break;
+            }
+          }
+        } catch (e) {}
+      }
+
+      if (parsedArray.length === 0) {
+        parsedArray = this.extractJsonArray(rawText);
+      }
+
+      const initialQuestions = this.normalizeQuizQuestions(parsedArray);
+      return initialQuestions.slice(0, 10);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`AI | quiz generation failed, falling back to heuristic: ${message}`);
-      return this.generateHeuristicQuiz(text);
+      this.logger.error(`AI | quiz generation failed: ${message}. Raw response: ${rawText || 'empty'}`);
+      return [];
     }
   }
 
@@ -218,32 +263,74 @@ ${context}`;
     const context = text.substring(offset, offset + 25000) || text.substring(0, 25000);
     const existingList = existingQuestions.map((q, idx) => `${idx + 1}. ${q.question}`).join('\n');
 
-    const prompt = `Task: Based on the content below, generate 5 new multiple-choice questions in English.
-IMPORTANT: You MUST NOT duplicate or ask similar questions to the ones already generated.
-Existing questions to avoid:
+    const systemPrompt = `You are a strict quiz generator. You MUST ONLY create questions from information EXPLICITLY stated in the provided document content. NEVER use external knowledge. If the content section does not contain enough NEW information to create more questions different from the existing ones, return an empty array.`;
+    const prompt = `Based STRICTLY on the document content below, generate up to 5 NEW multiple-choice questions in English.
+CRITICAL RULES:
+- ONLY use facts directly stated in the content below. Do NOT invent any information.
+- Do NOT duplicate or rephrase any of these existing questions:
 ${existingList}
+- If there is not enough NEW content to create valid questions, return an empty array: []
+- Return ONLY a valid JSON object containing a "questions" array.
+- Each item in the "questions" array: {"question": "...", "options": {"A": "...", "B": "...", "C": "...", "D": "..."}, "correctAnswer": "A", "explanation": "Based on the document: ..."}
 
-Return ONLY a JSON array. Each item: {"question": "...", "options": {"A": "...", "B": "...", "C": "...", "D": "..."}, "correctAnswer": "A", "explanation": "..."}.
+Required format:
+{
+  "questions": [
+    {
+      "question": "...",
+      "options": { "A": "...", "B": "...", "C": "...", "D": "..." },
+      "correctAnswer": "A",
+      "explanation": "..."
+    }
+  ]
+}
 
-Content:
+Document Content:
 ${context}`;
 
+    let rawText = '';
     try {
-      this.logger.debug(`AI | Sending progressive prompt to ${this.quizModel}, offset=${offset}...`);
+      this.logger.debug(`AI | Sending progressive PDF-strict prompt to ${this.quizModel}, offset=${offset}...`);
       
-      const rawText = await this.chat(this.quizModel, [
+      rawText = await this.chat(this.quizModel, [
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: prompt },
-      ]);
+      ], 'json');
 
-      const newQuestions = this.normalizeQuizQuestions(
-        this.extractJsonArray(rawText),
-      );
+      this.logger.debug(`AI | Progressive Quiz Response: ${rawText.substring(0, 300)}`);
 
-      return newQuestions.slice(0, 5);
+      let cleaned = rawText.trim();
+      if (cleaned.startsWith('```')) {
+        cleaned = cleaned.replace(/^```(json)?/, '').replace(/```$/, '').trim();
+      }
+
+      let parsedArray: any[] = [];
+      if (cleaned.startsWith('[')) {
+        try {
+          parsedArray = JSON.parse(cleaned);
+        } catch (e) {}
+      } else if (cleaned.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(cleaned);
+          for (const key of Object.keys(parsed)) {
+            if (Array.isArray(parsed[key])) {
+              parsedArray = parsed[key];
+              break;
+            }
+          }
+        } catch (e) {}
+      }
+
+      if (parsedArray.length === 0) {
+        parsedArray = this.extractJsonArray(rawText);
+      }
+
+      const newQuestions = this.normalizeQuizQuestions(parsedArray);
+      return newQuestions;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`AI | progressive quiz generation failed, using fallback: ${message}`);
-      return this.generateHeuristicQuiz(text);
+      this.logger.error(`AI | progressive quiz generation failed: ${message}. Raw response: ${rawText || 'empty'}`);
+      return [];
     }
   }
 
@@ -258,7 +345,7 @@ ${context}`;
           content: AI_PROMPTS.FLASHCARD_SYSTEM,
         },
         { role: 'user', content: prompt },
-      ]);
+      ], 'json');
 
       return this.extractJsonArray(rawText) as any[];
     } catch (error: unknown) {
@@ -283,7 +370,7 @@ ${context}`;
           content: AI_PROMPTS.BATCH_GEN_SYSTEM,
         },
         { role: 'user', content: prompt },
-      ]);
+      ], 'json');
 
       const parsed = this.extractJsonObject(rawText);
       const quizData = parsed.quizzes || parsed.quiz || [];
@@ -309,20 +396,78 @@ ${context}`;
   async generateMindMap(text: string): Promise<any[]> {
     const context = text.substring(0, 25000);
     const prompt = AI_PROMPTS.MINDMAP_USER(context);
+    let rawText = '';
 
     try {
-      const rawText = await this.chat(this.textModel, [
+      this.logger.debug('AI | Requesting mindmap from model...');
+      rawText = await this.chat(this.textModel, [
         {
           role: 'system',
-          content: 'You are an expert at extracting hierarchical information and visualizing it as a mind map. Always respond in English.',
+          content: 'You are an expert at extracting hierarchical information and visualizing it as a mind map. Always respond in English. Return ONLY a valid JSON array or a JSON object representing the mind map.',
         },
         { role: 'user', content: prompt },
-      ]);
+      ], 'json');
+
+      this.logger.debug(`AI | Raw Mindmap Response: ${rawText.substring(0, 500)}`);
+
+      let cleaned = rawText.trim();
+
+      if (cleaned.startsWith('```')) {
+        cleaned = cleaned.replace(/^```(json)?/, '').replace(/```$/, '').trim();
+      }
+
+
+      if (cleaned.startsWith('[')) {
+        try {
+          return JSON.parse(cleaned) as any[];
+        } catch (e) {
+
+        }
+      }
+
+
+      if (cleaned.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(cleaned);
+          
+
+          for (const key of Object.keys(parsed)) {
+            if (Array.isArray(parsed[key])) {
+              this.logger.log(`AI | Found mindmap array under key "${key}"`);
+              return parsed[key];
+            }
+          }
+
+
+          if (parsed.label || parsed.topic || parsed.name) {
+            this.logger.log('AI | Found mindmap tree structure, flattening...');
+            const flatList: any[] = [];
+            const flatten = (node: any, parentId: string | null = null) => {
+              if (!node || typeof node !== 'object') return;
+              const id = node.id || node.id === 0 ? String(node.id) : `node-${flatList.length + 1}`;
+              const label = node.label || node.topic || node.name || 'Concept';
+              flatList.push({ id, label, parentId });
+              
+              const children = node.children || node.subtopics || node.details || node.nodes;
+              if (Array.isArray(children)) {
+                for (const child of children) {
+                  flatten(child, id);
+                }
+              }
+            };
+            flatten(parsed);
+            return flatList;
+          }
+        } catch (e) {
+
+        }
+      }
+
 
       return this.extractJsonArray(rawText) as any[];
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`AI | mindmap generation failed, using fallback: ${message}`);
+      this.logger.error(`AI | mindmap generation failed, using fallback: ${message}. Raw response: ${rawText || 'empty'}`);
       return this.generateHeuristicMindMap(text);
     }
   }
@@ -356,7 +501,7 @@ ${context}`;
         content: AI_PROMPTS.STUDY_PLAN_SYSTEM,
       },
       { role: 'user', content: prompt },
-    ]);
+    ], 'json');
 
     const parsed = this.extractJsonObject(rawText);
     return this.normalizeStudyPlan(parsed, documentId, fileName);
@@ -499,14 +644,21 @@ ${context}`;
   private extractJsonArray(rawText: string): unknown[] {
     const jsonMatch = rawText.match(/\[\s*\{[\s\S]*\}\s*\]/);
     if (!jsonMatch) {
-      
       const simplerMatch = rawText.match(/\[[\s\S]*\]/);
-      if (!simplerMatch) throw new Error(AI_MESSAGES.NO_JSON_ARRAY);
-      try {
-        return JSON.parse(simplerMatch[0]) as unknown[];
-      } catch {
-        throw new Error(AI_MESSAGES.QUIZ_OUTPUT_NOT_ARRAY);
+      if (simplerMatch) {
+        try {
+          return JSON.parse(simplerMatch[0]) as unknown[];
+        } catch {}
       }
+
+      const singleObjectMatch = rawText.match(/\{[\s\S]*\}/);
+      if (singleObjectMatch) {
+        try {
+          return [JSON.parse(singleObjectMatch[0])];
+        } catch {}
+      }
+
+      throw new Error(AI_MESSAGES.NO_JSON_ARRAY);
     }
 
     try {
@@ -595,31 +747,38 @@ ${context}`;
     baseUrl: string,
     model: string,
     messages: OllamaChatMessage[],
+    format?: string,
   ): Promise<Response> {
+    const body: any = {
+      model,
+      messages,
+      stream: false,
+      options: {
+        temperature: 0,
+        top_p: 0.1,
+        num_predict: format === 'json' ? 4000 : 2000,
+      },
+    };
+    if (format) {
+      body.format = format;
+    }
+
     return fetch(`${baseUrl}/api/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model,
-        messages,
-        stream: false,
-        options: {
-          temperature: 0,
-          top_p: 0.1,
-          num_predict: 2000,
-        },
-      }),
+      body: JSON.stringify(body),
     });
   }
 
   private async chat(
     model: string,
     messages: OllamaChatMessage[],
+    format?: string,
   ): Promise<string> {
     try {
-      const response = await this.requestChat(this.baseUrl, model, messages);
+      const response = await this.requestChat(this.baseUrl, model, messages, format);
       return await this.parseChatResponse(response);
     } catch (primaryError: unknown) {
       const fallbackBaseUrl = this.getFallbackBaseUrl();
@@ -632,6 +791,7 @@ ${context}`;
           fallbackBaseUrl,
           model,
           messages,
+          format,
         );
         const content = await this.parseChatResponse(response);
         this.logger.warn(`AI | fallback recovered: ${fallbackBaseUrl}`);
@@ -849,36 +1009,12 @@ ${context}`;
 
   private generateHeuristicMindMap(text: string): any[] {
     return [
-      {
-        id: 'root',
-        topic: 'Document Main Core',
-        direction: 'root',
-        children: [
-          {
-            id: 'node1',
-            topic: 'Primary Concepts',
-            children: [
-              { id: 'sub1', topic: 'Core Definitions' },
-              { id: 'sub2', topic: 'Key Theoretical Models' }
-            ]
-          },
-          {
-            id: 'node2',
-            topic: 'Applications',
-            children: [
-              { id: 'sub3', topic: 'Practical Execution' },
-              { id: 'sub4', topic: 'Implementation Strategies' }
-            ]
-          },
-          {
-            id: 'node3',
-            topic: 'Summary Insights',
-            children: [
-              { id: 'sub5', topic: 'Synthesis & Outcomes' }
-            ]
-          }
-        ]
-      }
+      { id: '1', label: 'Document Key Concepts' },
+      { id: '2', label: 'Core Principles & Definitions', parentId: '1' },
+      { id: '3', label: 'Key Theoretical Models', parentId: '1' },
+      { id: '4', label: 'Practical Applications', parentId: '1' },
+      { id: '5', label: 'Implementation Strategies', parentId: '4' },
+      { id: '6', label: 'Summary & Synthesis Insights', parentId: '1' }
     ];
   }
 

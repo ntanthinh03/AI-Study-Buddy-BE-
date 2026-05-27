@@ -16,6 +16,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, MoreThan, Not, Repository } from 'typeorm';
 import { PasswordReset } from './entities/password-reset.entity';
 import { PasswordResetOtp } from './entities/password-reset-otp.entity';
+import { ProfileUpdateOtp } from './entities/profile-update-otp.entity';
 import { User } from '../users/entities/user.entity';
 import { AUTH_MESSAGES } from '../common/constants/messages';
 import { randomInt } from 'crypto';
@@ -32,6 +33,8 @@ export class AuthService {
     private passwordResetRepository: Repository<PasswordReset>,
     @InjectRepository(PasswordResetOtp)
     private passwordResetOtpRepository: Repository<PasswordResetOtp>,
+    @InjectRepository(ProfileUpdateOtp)
+    private profileUpdateOtpRepository: Repository<ProfileUpdateOtp>,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -51,6 +54,7 @@ export class AuthService {
       password: hashedPassword,
       fullName: dto.fullName,
       phoneNumber: dto.phoneNumber,
+      major: dto.major,
       provider: 'local',
     });
   }
@@ -86,6 +90,7 @@ export class AuthService {
         email: user.email,
         fullName: user.fullName,
         phoneNumber: user.phoneNumber,
+        major: user.major,
       },
     };
   }
@@ -297,5 +302,124 @@ export class AuthService {
 
   private generateSixDigitOtp() {
     return String(randomInt(0, 1_000_000)).padStart(6, '0');
+  }
+
+  async getUserProfile(email: string) {
+    const user = await this.usersService.findByEmail(email);
+    if (!user) {
+      throw new NotFoundException('Account not found.');
+    }
+    return {
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      phoneNumber: user.phoneNumber,
+      major: user.major,
+      avatar: user.avatar,
+    };
+  }
+
+  async updateAvatar(email: string, avatar: string) {
+    const user = await this.usersService.findByEmail(email);
+    if (!user) {
+      throw new NotFoundException('Account not found.');
+    }
+    user.avatar = avatar;
+    await this.profileUpdateOtpRepository.manager.save(user);
+    return this.getUserProfile(email);
+  }
+
+  async updateMajor(email: string, major: string) {
+    const user = await this.usersService.findByEmail(email);
+    if (!user) {
+      throw new NotFoundException('Account not found.');
+    }
+    user.major = major;
+    await this.profileUpdateOtpRepository.manager.save(user);
+    return this.getUserProfile(email);
+  }
+
+  async sendProfileUpdateOtp(currentUserEmail: string, type: 'email' | 'phone', targetValue: string) {
+    const user = await this.usersService.findByEmail(currentUserEmail);
+    if (!user) {
+      throw new NotFoundException('Account not found.');
+    }
+
+    const value = targetValue.trim();
+
+    if (type === 'email') {
+      const emailInUse = await this.usersService.findByEmail(value);
+      if (emailInUse && emailInUse.id !== user.id) {
+        throw new BadRequestException('This email is already in use by another account.');
+      }
+    }
+
+    const otp = this.generateSixDigitOtp();
+    const otpHash = await bcrypt.hash(otp, 10);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    const otpRecord = await this.profileUpdateOtpRepository.save({
+      user,
+      type,
+      targetValue: value,
+      otpHash,
+      expiresAt,
+      verifiedAt: null,
+    });
+
+    const sendToEmail = user.email;
+
+    try {
+      await this.mailerService.sendProfileUpdateOtpEmail(sendToEmail, otp, type);
+    } catch (error) {
+      await this.profileUpdateOtpRepository.delete({ id: otpRecord.id });
+      throw error;
+    }
+
+    return {
+      message: `Verification code sent to your current email address: ${sendToEmail}`,
+      expiresInMinutes: 10,
+    };
+  }
+
+  async verifyProfileUpdateOtp(currentUserEmail: string, type: 'email' | 'phone', targetValue: string, otp: string) {
+    const user = await this.usersService.findByEmail(currentUserEmail);
+    if (!user) {
+      throw new NotFoundException('Account not found.');
+    }
+
+    const value = targetValue.trim();
+
+    const otpRecord = await this.profileUpdateOtpRepository.findOne({
+      where: {
+        user: { id: user.id },
+        type,
+        targetValue: value,
+        verifiedAt: IsNull(),
+        expiresAt: MoreThan(new Date()),
+      },
+      order: { createdAt: 'DESC' },
+    });
+
+    if (!otpRecord) {
+      throw new BadRequestException('Invalid or expired OTP code.');
+    }
+
+    const isOtpValid = await bcrypt.compare(otp, otpRecord.otpHash);
+    if (!isOtpValid) {
+      throw new BadRequestException('Incorrect OTP code.');
+    }
+
+    otpRecord.verifiedAt = new Date();
+    await this.profileUpdateOtpRepository.save(otpRecord);
+
+    if (type === 'email') {
+      user.email = value;
+    } else if (type === 'phone') {
+      user.phoneNumber = value;
+    }
+    await this.profileUpdateOtpRepository.manager.save(user);
+
+    return this.getUserProfile(user.email);
   }
 }

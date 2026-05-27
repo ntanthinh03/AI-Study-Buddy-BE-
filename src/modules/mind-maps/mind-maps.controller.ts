@@ -21,7 +21,7 @@ export class MindMapsController {
     @Body() body: { documentId: string; text: string },
   ) {
     return this.mindMapsService.generateAndSave(
-      req.user.id,
+      req.user.userId,
       body.documentId,
       body.text,
     );
@@ -29,11 +29,11 @@ export class MindMapsController {
 
   @Get()
   async findAll(@Request() req) {
-    return this.mindMapsService.findAllByUser(req.user.id);
+    return this.mindMapsService.findAllByUser(req.user.userId);
   }
 
   @Get(':id')
   async findOne(@Request() req, @Param('id') id: string) {
-    return this.mindMapsService.findOne(id, req.user.id);
+    return this.mindMapsService.findOne(id, req.user.userId);
   }
 }

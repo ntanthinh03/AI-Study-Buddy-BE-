@@ -134,4 +134,71 @@ export class MailerService {
       throw error;
     }
   }
+
+  async sendProfileUpdateOtpEmail(
+    email: string,
+    otp: string,
+    type: 'email' | 'phone',
+  ) {
+    const devFallbackEnabled =
+      this.configService.get<string>('MAILER_DEV_FALLBACK')?.toLowerCase() ===
+      'true';
+
+    try {
+      const isEmailUpdate = type === 'email';
+      const subject = isEmailUpdate 
+        ? 'AI Study Buddy | Email Update Verification Code' 
+        : 'AI Study Buddy | Phone Update Verification Code';
+
+      const actionText = isEmailUpdate 
+        ? 'update your account email' 
+        : 'update your account phone number';
+
+      const textContent = [
+        'Dear user,',
+        '',
+        `Your verification code to ${actionText} is:`,
+        otp,
+        '',
+        'This code is valid for 10 minutes.',
+        'If you did not request this change, please ignore this email.',
+        '',
+        'Regards,',
+        'Nguyen Tan Thinh',
+      ].join('\n');
+
+      const htmlContent = `
+        <div style="font-family: Arial, Helvetica, sans-serif; color: #1f2937; line-height: 1.6;">
+          <h2 style="margin: 0 0 16px; color: #111827;">Profile Update Verification</h2>
+          <p>Dear user,</p>
+          <p>Your verification code to <b>${actionText}</b> is:</p>
+          <p>
+            <span style="display:inline-block; padding: 6px 12px; border-radius: 8px; background: #eef2ff; color: #1d4ed8; font-weight: 700; letter-spacing: 2px; font-size: 18px;">${otp}</span>
+          </p>
+          <p>This code is valid for <b>10 minutes</b>.</p>
+          <p>If you did not request this change, please ignore this email.</p>
+          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
+          <p style="margin: 0;">Regards,</p>
+          <p style="margin: 4px 0 0; font-weight: 700;">Nguyen Tan Thinh</p>
+        </div>
+      `;
+
+      await this.send(
+        email,
+        subject,
+        htmlContent,
+        textContent,
+      );
+    } catch (error) {
+      if (devFallbackEnabled) {
+        this.logger.warn(
+          'MAILER | Brevo send failed, using dev fallback log instead.',
+        );
+        this.logger.log(`MAILER | OTP (dev fallback) for ${email}: ${otp}`);
+        return;
+      }
+
+      throw error;
+    }
+  }
 }

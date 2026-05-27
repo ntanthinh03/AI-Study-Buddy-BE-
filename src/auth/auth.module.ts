@@ -10,13 +10,14 @@ import { UsersModule } from '../users/users.module';
 import { JwtStrategy } from './jwt.strategy';
 import { PasswordReset } from './entities/password-reset.entity';
 import { PasswordResetOtp } from './entities/password-reset-otp.entity';
+import { ProfileUpdateOtp } from './entities/profile-update-otp.entity';
 import { MailerModule } from '../mailer/mailer.module';
 
 @Module({
   imports: [
     UsersModule,
     MailerModule,
-    TypeOrmModule.forFeature([PasswordReset, PasswordResetOtp]),
+    TypeOrmModule.forFeature([PasswordReset, PasswordResetOtp, ProfileUpdateOtp]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

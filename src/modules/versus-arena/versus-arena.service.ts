@@ -23,7 +23,7 @@ export class VersusArenaService {
   async startMatch(user: any, documentId: string, mode = 'BOT', difficulty = 'MEDIUM'): Promise<VersusMatch> {
     const userId = user?.userId ?? user?.id ?? user;
 
-    // Check Lockout
+
     let stats = await this.statsRepository.findOne({ where: { user: { id: userId } } });
     if (stats && stats.versusLockoutUntil) {
       const lockoutTime = new Date(stats.versusLockoutUntil).getTime();
@@ -31,7 +31,7 @@ export class VersusArenaService {
         const remainingSec = Math.ceil((lockoutTime - Date.now()) / 1000);
         throw new ForbiddenException(`Neural Arena is locked due to forfeits. Locked for ${remainingSec} more seconds.`);
       } else {
-        // Lock expired! Clean it up.
+
         stats.versusLockoutUntil = null;
         stats.versusWarningsCount = 0;
         await this.statsRepository.save(stats);
@@ -47,7 +47,7 @@ export class VersusArenaService {
 
     this.logger.log(`Starting Versus Match for user ${userId} and document ${documentId} with mode ${mode} difficulty ${difficulty}`);
 
-    // Generate 3 initial questions instantly
+
     let initialQuestions = await this.aiService.generateQuiz(document.contentText || '');
     if (initialQuestions.length === 0) {
       initialQuestions = await this.aiService.generateQuiz(document.contentText || '');
@@ -100,7 +100,7 @@ export class VersusArenaService {
 
     const savedMatch = await this.matchRepository.save(match);
 
-    // Launch async worker to generate the remaining questions
+
     this.generateRemainingQuestionsAsync(savedMatch.id, document.contentText || '');
 
     return savedMatch;
@@ -162,7 +162,7 @@ export class VersusArenaService {
     const question = match.questions[questionIndex];
     const isCorrect = question.correctAnswer === selectedAnswer;
 
-    // 1. Calculate player score
+
     let scoreEarned = 0;
     if (isCorrect) {
       const timeBonus = Math.max(0, Math.round((30 - timeTakenSeconds) * (500 / 30)));
@@ -171,7 +171,7 @@ export class VersusArenaService {
     }
     match.playerScore += scoreEarned;
     
-    // Make sure we preserve old answers and merge correctly
+
     const updatedPlayerAnswers = { ...match.playerAnswers };
     updatedPlayerAnswers[questionIndex] = {
       selectedAnswer,
@@ -180,7 +180,7 @@ export class VersusArenaService {
     };
     match.playerAnswers = updatedPlayerAnswers;
 
-    // 2. Simulate AI Bot answer (if not private PVP Room)
+
     if (match.mode !== 'PVP_LOBBY') {
       const options = ['A', 'B', 'C', 'D'];
       let accuracy = 0.75;
@@ -221,7 +221,7 @@ export class VersusArenaService {
       match.botAnswers = updatedBotAnswers;
     }
 
-    // Check if match is finished
+
     const totalQuestions = match.questions.length;
     const playerAnswered = Object.keys(match.playerAnswers).length;
     const opponentAnswered = Object.keys(match.botAnswers).length;
@@ -243,7 +243,7 @@ export class VersusArenaService {
         
         let stats = await this.statsRepository.findOne({ where: { user: { id: userId } } });
         if (stats) {
-          // ELO calculation
+
           const eloA = stats.elo;
           const eloB = match.opponentElo;
           const EA = 1 / (1 + Math.pow(10, (eloB - eloA) / 400));
@@ -309,9 +309,9 @@ export class VersusArenaService {
     let lockoutUntil: Date | null = null;
 
     if (stats.versusWarningsCount >= 3) {
-      lockoutUntil = new Date(Date.now() + 6 * 60 * 60 * 1000); // 6 hours
+      lockoutUntil = new Date(Date.now() + 6 * 60 * 60 * 1000);
       stats.versusLockoutUntil = lockoutUntil;
-      stats.versusWarningsCount = 0; // reset warning after lockout
+      stats.versusWarningsCount = 0;
       locked = true;
     }
 
@@ -342,7 +342,7 @@ export class VersusArenaService {
           warningsCount: stats.versusWarningsCount,
         };
       } else {
-        // Expired!
+
         stats.versusLockoutUntil = null;
         stats.versusWarningsCount = 0;
         await this.statsRepository.save(stats);
@@ -359,7 +359,7 @@ export class VersusArenaService {
   async createRoom(user: any) {
     const userId = user?.userId ?? user?.id ?? user;
     
-    // Check lockout first
+
     let stats = await this.statsRepository.findOne({ where: { user: { id: userId } } });
     if (stats && stats.versusLockoutUntil) {
       const lockoutTime = new Date(stats.versusLockoutUntil).getTime();
@@ -369,7 +369,7 @@ export class VersusArenaService {
       }
     }
 
-    // Generate unique 6 digit room code
+
     const roomCode = Math.floor(100000 + Math.random() * 900000).toString();
 
     const hostStats = await this.statsRepository.findOne({ where: { user: { id: userId } }, relations: ['user'] });
@@ -403,7 +403,7 @@ export class VersusArenaService {
   async joinRoom(user: any, roomCode: string) {
     const userId = user?.userId ?? user?.id ?? user;
 
-    // Check lockout first
+
     let guestStats = await this.statsRepository.findOne({
       where: { user: { id: userId } },
       relations: ['user'],
@@ -429,7 +429,7 @@ export class VersusArenaService {
       throw new BadRequestException('Cannot join your own private room');
     }
 
-    // Set opponent
+
     match.opponent = { id: userId } as any;
     match.opponentName = guestStats ? (guestStats.user.fullName || guestStats.user.email.split('@')[0]) : 'Guest';
     match.opponentElo = guestStats ? guestStats.elo : 1200;
@@ -467,7 +467,7 @@ export class VersusArenaService {
       throw new NotFoundException('Document PDF not found');
     }
 
-    // Generate 3 initial questions
+
     let initialQuestions = await this.aiService.generateQuiz(document.contentText || '');
     if (initialQuestions.length === 0) {
       initialQuestions = await this.aiService.generateQuiz(document.contentText || '');
@@ -483,7 +483,7 @@ export class VersusArenaService {
     match.status = MatchStatus.GENERATING_INITIAL;
     await this.matchRepository.save(match);
 
-    // Run background generation
+
     this.generateRemainingQuestionsAsync(match.id, document.contentText || '');
 
     const hostStats = await this.statsRepository.findOne({ where: { user: { id: userId } } });
@@ -554,7 +554,7 @@ export class VersusArenaService {
     const question = match.questions[questionIndex];
     const isCorrect = question.correctAnswer === selectedAnswer;
 
-    // Calculate score
+
     let scoreEarned = 0;
     if (isCorrect) {
       const timeBonus = Math.max(0, Math.round((30 - timeTakenSeconds) * (500 / 30)));
@@ -570,7 +570,7 @@ export class VersusArenaService {
     } as any;
     match.botAnswers = updatedBotAnswers;
 
-    // Check completion
+
     const totalQuestions = match.questions.length;
     const playerAnswered = Object.keys(match.playerAnswers).length;
     const opponentAnswered = Object.keys(match.botAnswers).length;
@@ -595,12 +595,12 @@ export class VersusArenaService {
       const eloA = hostStats.elo;
       const eloB = guestStats.elo;
 
-      // Expected scores
+
       const EA = 1 / (1 + Math.pow(10, (eloB - eloA) / 400));
       const EB = 1 / (1 + Math.pow(10, (eloA - eloB) / 400));
 
-      let SA = 0.5; // Host result
-      let SB = 0.5; // Guest result
+      let SA = 0.5;
+      let SB = 0.5;
 
       if (match.playerScore > match.botScore) {
         SA = 1.0;
@@ -617,14 +617,14 @@ export class VersusArenaService {
         guestStats.versusWinStreak = 0;
       }
 
-      // ELO adjustments
+
       const changeA = Math.round(32 * (SA - EA));
       const changeB = Math.round(32 * (SB - EB));
 
       hostStats.elo = Math.max(800, hostStats.elo + changeA);
       guestStats.elo = Math.max(800, guestStats.elo + changeB);
 
-      // XP adjustments
+
       let hostXP = SA === 1.0 ? 100 : (SA === 0.5 ? 75 : 50);
       let guestXP = SB === 1.0 ? 100 : (SB === 0.5 ? 75 : 50);
 
@@ -731,7 +731,7 @@ export class VersusArenaService {
       });
     }
 
-    // Cooldown check (7 days = 7 * 24 * 60 * 60 * 1000 = 604,800,000 ms)
+
     if (stats.lastArenaNameChange) {
       const elapsed = Date.now() - new Date(stats.lastArenaNameChange).getTime();
       const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
@@ -741,7 +741,7 @@ export class VersusArenaService {
       }
     }
 
-    // Uniqueness check
+
     const normalized = newName.trim();
     const existing = await this.statsRepository.findOne({
       where: { arenaName: ILike(normalized) }

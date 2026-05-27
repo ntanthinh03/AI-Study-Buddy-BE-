@@ -1,6 +1,7 @@
 import {
   IsEmail,
   IsNotEmpty,
+  IsOptional,
   IsString,
   MinLength,
 } from 'class-validator';
@@ -24,4 +25,8 @@ export class RegisterDto {
   @IsString()
   @IsNotEmpty({ message: AUTH_VALIDATION_MESSAGES.PHONE_REQUIRED })
   phoneNumber!: string;
+
+  @IsString()
+  @IsOptional()
+  major?: string;
 }

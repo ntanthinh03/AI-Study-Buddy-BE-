@@ -22,6 +22,7 @@ export class UsersService {
         'avatar',
         'googleId',
         'phoneNumber',
+        'major',
       ],
     });
   }

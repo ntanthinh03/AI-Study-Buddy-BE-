@@ -21,6 +21,15 @@ export class FlashcardsController {
     return await this.flashcardsService.generateFlashcards(documentId, req.user);
   }
 
+  @Post('generate-by-topic')
+  async generateByTopic(
+    @Body('documentId') documentId: string,
+    @Body('topic') topic: string,
+    @Req() req: any,
+  ) {
+    return await this.flashcardsService.generateFlashcardsByTopic(documentId, topic, req.user);
+  }
+
   @Get()
   async findAll(@Req() req: any) {
     return await this.flashcardsService.getFlashcardsByUser(req.user);

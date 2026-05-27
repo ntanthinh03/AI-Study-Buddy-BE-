@@ -30,6 +30,9 @@ export class User {
   @Column({ name: 'phone_number', nullable: true })
   phoneNumber!: string;
 
+  @Column({ name: 'major', nullable: true })
+  major!: string;
+
   @Column({ type: 'text', nullable: true })
   avatar!: string;
 

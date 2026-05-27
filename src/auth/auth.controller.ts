@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   Post,
   Req,
   UseGuards,
@@ -60,5 +61,56 @@ export class AuthController {
     @Body() dto: ChangePasswordDto,
   ) {
     return this.authService.changePassword(req.user?.email, dto);
+  }
+
+  @Get('profile')
+  @UseGuards(AuthGuard('jwt'))
+  async getProfile(@Req() req: AuthenticatedRequest) {
+    return this.authService.getUserProfile(req.user?.email);
+  }
+
+  @Post('profile/update-major')
+  @UseGuards(AuthGuard('jwt'))
+  async updateMajor(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: { major: string },
+  ) {
+    return this.authService.updateMajor(req.user?.email, body.major);
+  }
+
+  @Post('profile/update-avatar')
+  @UseGuards(AuthGuard('jwt'))
+  async updateAvatar(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: { avatar: string },
+  ) {
+    return this.authService.updateAvatar(req.user?.email, body.avatar);
+  }
+
+  @Post('profile/send-otp')
+  @UseGuards(AuthGuard('jwt'))
+  async sendProfileUpdateOtp(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: { type: 'email' | 'phone'; value: string },
+  ) {
+    return this.authService.sendProfileUpdateOtp(
+      req.user?.email,
+      body.type,
+      body.value,
+    );
+  }
+
+  @Post('profile/verify-otp')
+  @UseGuards(AuthGuard('jwt'))
+  async verifyProfileUpdateOtp(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: { type: 'email' | 'phone'; value: string; otp: string },
+  ) {
+    return this.authService.verifyProfileUpdateOtp(
+      req.user?.email,
+      body.type,
+      body.value,
+      body.otp,
+    );
   }
 }

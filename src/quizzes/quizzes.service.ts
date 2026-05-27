@@ -46,6 +46,10 @@ export class QuizzesService {
 
     const questions = await this.aiService.generateQuiz(document.contentText);
 
+    if (!questions || questions.length === 0) {
+      throw new Error('AI could not generate quiz questions from this PDF. The content may be too short or lacks factual details for a multiple-choice quiz.');
+    }
+
     const artifactMessage = await this.documentsService.saveArtifactMessage(
       userId,
       documentId,

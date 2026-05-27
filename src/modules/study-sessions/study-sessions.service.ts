@@ -47,33 +47,34 @@ export class StudySessionsService {
 
     if (session) return session;
 
-    const poolQuizzes = await this.poolRepository.find({
-      where: { user: { id: userId }, type: QuestionType.QUIZ, isUsed: false },
-      take: 5,
-    });
+    // Fetch up to 20 random quiz questions from the user's generated question pool
+    // Prioritize unused questions
+    let poolQuizzes = await this.poolRepository.createQueryBuilder('pool')
+      .where('pool.user_id = :userId', { userId })
+      .andWhere('pool.type = :type', { type: QuestionType.QUIZ })
+      .andWhere('pool.is_used = :isUsed', { isUsed: false })
+      .orderBy('RANDOM()')
+      .take(20)
+      .getMany();
 
-    const dueFlashcards = await this.flashcardRepository.find({
-      where: {
-        user: { id: userId },
-        nextReview: MoreThanOrEqual(new Date(0)),
-      },
-      take: 5,
-    });
+    // If less than 20 unused quizzes, fill the rest with random used quizzes
+    if (poolQuizzes.length < 20) {
+      const remainingCount = 20 - poolQuizzes.length;
+      const extraQuizzes = await this.poolRepository.createQueryBuilder('pool')
+        .where('pool.user_id = :userId', { userId })
+        .andWhere('pool.type = :type', { type: QuestionType.QUIZ })
+        .andWhere('pool.is_used = :isUsed', { isUsed: true })
+        .orderBy('RANDOM()')
+        .take(remainingCount)
+        .getMany();
+      poolQuizzes = [...poolQuizzes, ...extraQuizzes];
+    }
 
     session = this.sessionRepository.create({
       user: { id: userId },
       content: {
         quizQuestions: poolQuizzes.map(p => ({ ...p.data, poolId: p.id })),
-        flashcards: dueFlashcards.map(f => ({
-          id: f.id,
-          front: f.front,
-          back: f.back,
-          box: f.box,
-          next_review: f.nextReview ? f.nextReview.toISOString() : null,
-          document_id: f.document ? (f.document as any).id : null,
-          created_at: f.createdAt ? f.createdAt.toISOString() : new Date().toISOString(),
-          updated_at: f.updatedAt ? f.updatedAt.toISOString() : new Date().toISOString(),
-        })),
+        flashcards: [], // Omit flashcards for the 20-question daily quiz challenge
       },
       status: SessionStatus.IN_PROGRESS,
     });
@@ -97,25 +98,19 @@ export class StudySessionsService {
       this.logger.log(`Document Content Length: ${document.contentText?.length || 0}`);
       this.logger.log(`Document Content Snippet: ${document.contentText?.substring(0, 200)}...`);
       
-      
       let questions = await this.aiService.generateQuiz(document.contentText || '');
       
-      
       if (questions.length === 0) {
-        this.logger.warn(`AI failed first attempt for document ${documentId}, retrying...`);
+        this.logger.warn(`AI returned 0 questions for document ${documentId}, retrying once...`);
         questions = await this.aiService.generateQuiz(document.contentText || '');
       }
 
-      
-      if (questions.length < 15) {
-        const extra = await this.aiService.generateQuiz(document.contentText || '');
-        questions = [...questions, ...extra];
+      if (questions.length === 0) {
+        this.logger.error(`AI failed to generate any questions for document ${documentId} after retry`);
+        throw new Error('AI could not generate quiz questions from this PDF. The content may be too short or not contain enough factual information for quiz generation.');
       }
 
-      if (questions.length === 0) {
-        this.logger.error(`AI failed to generate any questions for document ${documentId} after retries`);
-        throw new Error('AI failed to generate questions for this document. The content might be too complex or short.');
-      }
+      this.logger.log(`AI generated ${questions.length} PDF-strict questions for document ${documentId}`);
 
       
       questionsData = questions.map(q => ({ 

@@ -190,12 +190,8 @@ export class RagService {
         return (
           q.includes('summarize') ||
           q.includes('summary') ||
-          q.includes('tóm tắt') ||
-          q.includes('tom tat') ||
-          q.includes('sơ lược') ||
-          q.includes('so luoc') ||
-          q.includes('khái quát') ||
-          q.includes('khai quat')
+          q.includes('overview') ||
+          q.includes('brief')
         );
       };
 

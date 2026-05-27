@@ -96,6 +96,66 @@ export class FlashcardsService {
     return await this.flashcardRepository.save(flashcards);
   }
 
+  async generateFlashcardsByTopic(documentId: string, topic: string, user: User): Promise<Flashcard[]> {
+    const document = await this.documentRepository.findOne({
+      where: { id: documentId, user: { id: user.id } },
+    });
+
+    if (!document) {
+      throw new NotFoundException('Document not found');
+    }
+
+    const context = document.contentText || document.summary || '';
+    if (!context) {
+      throw new Error('Document has no content to generate flashcards');
+    }
+
+    this.logger.log(`Generating flashcards for topic "${topic}" in document: ${documentId}`);
+
+    const response = await this.model.invoke([
+      { role: 'system', content: 'You are a precise academic assistant. Always respond in English.' },
+      { role: 'user', content: AI_PROMPTS.FLASHCARD_TOPIC_USER(context, topic) },
+    ]);
+
+    let content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+    this.logger.debug(`AI Topic Flashcard Raw Response: ${content}`);
+    
+    content = content.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    let flashcardsData: any;
+    try {
+      const jsonMatch = content.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
+      const jsonToParse = jsonMatch ? jsonMatch[0] : content;
+      flashcardsData = JSON.parse(jsonToParse);
+    } catch (e) {
+      this.logger.error(`Failed to parse AI response for topic: ${content}`);
+      throw new Error('Failed to parse flashcards data from AI');
+    }
+
+    if (!Array.isArray(flashcardsData)) {
+      if (flashcardsData && typeof flashcardsData === 'object' && flashcardsData.flashcards && Array.isArray(flashcardsData.flashcards)) {
+        flashcardsData = flashcardsData.flashcards;
+      } else if (flashcardsData && typeof flashcardsData === 'object' && flashcardsData.data && Array.isArray(flashcardsData.data)) {
+        flashcardsData = flashcardsData.data;
+      } else {
+        this.logger.error(`AI response is not an array: ${JSON.stringify(flashcardsData)}`);
+        throw new Error('AI generated invalid flashcards format');
+      }
+    }
+
+    const flashcards = flashcardsData.map((data: any) => {
+      const flashcard = new Flashcard();
+      flashcard.front = data.front;
+      flashcard.back = data.back;
+      flashcard.user = user;
+      flashcard.document = document;
+      flashcard.nextReview = new Date();
+      return flashcard;
+    });
+
+    return await this.flashcardRepository.save(flashcards);
+  }
+
   async getFlashcardsByUser(user: User): Promise<Flashcard[]> {
     return await this.flashcardRepository.find({
       where: { user: { id: user.id } },

@@ -18,11 +18,15 @@ export class StudyRoomsGateway implements OnGatewayConnection, OnGatewayDisconne
   
   private quizStates: Map<string, {
     hostId: string;
+    hostUsername: string;
     questions: any[];
     currentQuestionIndex: number;
     scores: Map<string, number>;
     playerNames: Map<string, string>;
     answeredPlayers: Set<string>;
+    selectedDocumentName?: string;
+    isGeneratingMore: boolean;
+    isWaitingForMore: boolean;
   }> = new Map();
 
   handleConnection(client: Socket) {
@@ -39,8 +43,12 @@ export class StudyRoomsGateway implements OnGatewayConnection, OnGatewayDisconne
     @MessageBody() data: { roomCode: string; username: string },
     @ConnectedSocket() client: Socket,
   ) {
+    console.log(`[StudyRoomsGateway] joinRoom triggered. Client: ${client.id}, roomCode: ${data?.roomCode}, username: ${data?.username}`);
     const roomCode = data.roomCode.trim().toUpperCase();
-    if (!roomCode) return { event: 'error', data: 'Invalid room code' };
+    if (!roomCode) {
+      console.log(`[StudyRoomsGateway] Rejected empty roomCode`);
+      return { event: 'error', data: 'Invalid room code' };
+    }
 
     client.join(roomCode);
     if (!this.rooms.has(roomCode)) {
@@ -51,11 +59,14 @@ export class StudyRoomsGateway implements OnGatewayConnection, OnGatewayDisconne
     if (!this.quizStates.has(roomCode)) {
       this.quizStates.set(roomCode, {
         hostId: client.id,
+        hostUsername: data.username,
         questions: [],
         currentQuestionIndex: -1,
         scores: new Map(),
         playerNames: new Map(),
-        answeredPlayers: new Set()
+        answeredPlayers: new Set(),
+        isGeneratingMore: false,
+        isWaitingForMore: false
       });
     }
     const state = this.quizStates.get(roomCode)!;
@@ -73,7 +84,7 @@ export class StudyRoomsGateway implements OnGatewayConnection, OnGatewayDisconne
     const rankings = this.getRankings(roomCode);
     client.emit('leaderboardUpdate', rankings);
 
-    return { event: 'joined', data: { roomCode, isHost: state.hostId === client.id, participants } };
+    return { event: 'joined', data: { roomCode, isHost: state.hostUsername === data.username, participants, selectedDocumentName: state.selectedDocumentName } };
   }
 
   private getRankings(roomCode: string) {
@@ -101,7 +112,8 @@ export class StudyRoomsGateway implements OnGatewayConnection, OnGatewayDisconne
     @ConnectedSocket() client: Socket,
   ) {
     const state = this.quizStates.get(data.roomCode);
-    if (state && state.hostId === client.id) {
+    const username = state?.playerNames.get(client.id);
+    if (state && state.hostUsername === username) {
       this.server.to(data.roomCode).emit('materialSelectionStarted', { hostId: client.id });
     }
   }
@@ -111,7 +123,19 @@ export class StudyRoomsGateway implements OnGatewayConnection, OnGatewayDisconne
     @MessageBody() data: { roomCode: string; documentId: string; fileName: string },
     @ConnectedSocket() client: Socket,
   ) {
+    const state = this.quizStates.get(data.roomCode);
+    if (state) {
+      state.selectedDocumentName = data.fileName;
+    }
     this.server.to(data.roomCode).emit('hostSelectedMaterial', { fileName: data.fileName });
+  }
+
+  @SubscribeMessage('quizPreparing')
+  handleQuizPreparing(
+    @MessageBody() data: { roomCode: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    this.server.to(data.roomCode).emit('quizPreparing');
   }
 
   @SubscribeMessage('startQuiz')
@@ -120,15 +144,19 @@ export class StudyRoomsGateway implements OnGatewayConnection, OnGatewayDisconne
     @ConnectedSocket() client: Socket,
   ) {
     const state = this.quizStates.get(data.roomCode);
-    if (state && state.hostId === client.id) {
+    const username = state?.playerNames.get(client.id);
+    if (state && state.hostUsername === username) {
       state.questions = data.questions;
       state.currentQuestionIndex = 0;
       state.scores.clear();
       state.answeredPlayers.clear();
+      state.isGeneratingMore = true;
+      state.isWaitingForMore = false;
       this.rooms.get(data.roomCode)?.forEach(sid => state.scores.set(sid, 0));
 
-      const endsAt = Date.now() + 30000; // 30 seconds for first question
+      const endsAt = Date.now() + 30000;
       this.server.to(data.roomCode).emit('quizStarted', { 
+        roomCode: data.roomCode,
         totalQuestions: data.questions.length,
         questions: data.questions,
         endsAt
@@ -144,9 +172,25 @@ export class StudyRoomsGateway implements OnGatewayConnection, OnGatewayDisconne
     const state = this.quizStates.get(data.roomCode);
     if (state) {
       state.questions = [...state.questions, ...data.additionalQuestions];
+      console.log(`[addQuestions] roomCode=${data.roomCode}, total questions now: ${state.questions.length}`);
       this.server.to(data.roomCode).emit('questionsUpdated', { 
         totalQuestions: state.questions.length 
       });
+
+
+      if (state.isWaitingForMore && state.currentQuestionIndex < state.questions.length - 1) {
+        state.isWaitingForMore = false;
+        state.currentQuestionIndex++;
+        state.answeredPlayers.clear();
+        const endsAt = Date.now() + 30000;
+        this.server.to(data.roomCode).emit('newQuestion', {
+          index: state.currentQuestionIndex,
+          question: state.questions[state.currentQuestionIndex],
+          endsAt
+        });
+        const rankings = this.getRankings(data.roomCode);
+        this.server.to(data.roomCode).emit('leaderboardUpdate', rankings);
+      }
     }
   }
 
@@ -184,12 +228,15 @@ export class StudyRoomsGateway implements OnGatewayConnection, OnGatewayDisconne
 
   @SubscribeMessage('nextQuestion')
   handleNextQuestion(
-    @MessageBody() data: { roomCode: string },
+    @MessageBody() data: { roomCode: string; username?: string },
     @ConnectedSocket() client: Socket,
   ) {
     const state = this.quizStates.get(data.roomCode);
-    if (state && state.hostId === client.id) {
+    const username = data.username || state?.playerNames.get(client.id);
+    console.log(`[handleNextQuestion] roomCode: ${data.roomCode}, username: ${username}, hostUsername: ${state?.hostUsername}`);
+    if (state && state.hostUsername === username) {
       if (state.currentQuestionIndex < state.questions.length - 1) {
+
         state.currentQuestionIndex++;
         state.answeredPlayers.clear();
         const endsAt = Date.now() + 30000;
@@ -198,7 +245,32 @@ export class StudyRoomsGateway implements OnGatewayConnection, OnGatewayDisconne
           question: state.questions[state.currentQuestionIndex],
           endsAt
         });
+      } else if (state.isGeneratingMore) {
+
+        console.log(`[handleNextQuestion] Waiting for more questions in room ${data.roomCode}...`);
+        state.isWaitingForMore = true;
+        this.server.to(data.roomCode).emit('waitingForQuestions');
       } else {
+
+        this.server.to(data.roomCode).emit('quizEnded', {
+          finalRankings: this.getRankings(data.roomCode)
+        });
+      }
+    }
+  }
+
+  @SubscribeMessage('generationComplete')
+  handleGenerationComplete(
+    @MessageBody() data: { roomCode: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const state = this.quizStates.get(data.roomCode);
+    if (state) {
+      console.log(`[generationComplete] roomCode=${data.roomCode}, total questions: ${state.questions.length}`);
+      state.isGeneratingMore = false;
+
+      if (state.isWaitingForMore) {
+        state.isWaitingForMore = false;
         this.server.to(data.roomCode).emit('quizEnded', {
           finalRankings: this.getRankings(data.roomCode)
         });

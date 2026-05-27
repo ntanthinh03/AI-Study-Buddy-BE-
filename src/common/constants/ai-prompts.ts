@@ -156,6 +156,24 @@ Required format:
 
 Source content:
 ${context}`,
+  FLASHCARD_TOPIC_USER: (context: string, topic: string) => `Generate exactly 3-5 high-quality flashcards in English about the specific concept: "${topic}" based ONLY on the relevant document content below.
+Do not include outside knowledge or cover unrelated topics. Output strictly in English.
+
+STRICT RULES:
+- Return ONLY a valid JSON array.
+- No markdown, no code fences, no extra text.
+- Each flashcard must have a 'front' (question or term about "${topic}") and a 'back' (clear explanation or definition).
+
+Required format:
+[
+  {
+    "front": "...",
+    "back": "..."
+  }
+]
+
+Source content:
+${context}`,
 
   BATCH_GEN_SYSTEM:
     'You are a high-speed study material generator. You generate both quizzes and flashcards simultaneously. Always respond in English.',
@@ -163,7 +181,7 @@ ${context}`,
     const quizReq = quizCount > 0 ? `exactly ${quizCount} quiz questions` : "";
     const flashReq = flashcardCount > 0 ? `exactly ${flashcardCount} flashcards` : "";
     const joinReq = [quizReq, flashReq].filter(Boolean).join(" and ");
-    
+
     return `Based on the source content below, generate a batch of study materials: ${joinReq}.
 
 STRICT RULES:
@@ -198,18 +216,20 @@ ${context}`;
 Use ONLY the information present in the source. Output strictly in English.
 
 STRICT RULES:
-- Return ONLY a valid JSON array representing the nodes.
+- Return ONLY a valid JSON object containing a "nodes" array.
 - No markdown, no code fences, no extra text.
-- Each node must have: 'id' (unique string), 'label' (concise concept name), and optionally 'parentId' (id of the parent node).
+- Each node in the "nodes" array must have: 'id' (unique string), 'label' (concise concept name), and optionally 'parentId' (id of the parent node).
 - The root node should represent the main topic and have no 'parentId'.
 
 Required format:
-[
-  { "id": "1", "label": "Main Topic" },
-  { "id": "2", "label": "Subtopic A", "parentId": "1" },
-  { "id": "3", "label": "Subtopic B", "parentId": "1" },
-  { "id": "4", "label": "Detail A1", "parentId": "2" }
-]
+{
+  "nodes": [
+    { "id": "1", "label": "Main Topic" },
+    { "id": "2", "label": "Subtopic A", "parentId": "1" },
+    { "id": "3", "label": "Subtopic B", "parentId": "1" },
+    { "id": "4", "label": "Detail A1", "parentId": "2" }
+  ]
+}
 
 Source content:
 ${context}`,
