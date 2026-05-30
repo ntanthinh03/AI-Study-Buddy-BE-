@@ -246,15 +246,24 @@ ${context}`;
       }
 
       if (parsedArray.length === 0) {
-        parsedArray = this.extractJsonArray(rawText);
+        try {
+          parsedArray = this.extractJsonArray(rawText);
+        } catch (e: any) {
+          this.logger.warn(`AI | JSON array extraction failed: ${e.message}. Using heuristic fallback.`);
+        }
       }
 
       const initialQuestions = this.normalizeQuizQuestions(parsedArray);
-      return initialQuestions.slice(0, 10);
+      if (initialQuestions.length > 0) {
+        return initialQuestions.slice(0, 10);
+      }
+
+      this.logger.warn('AI | Normalized questions were empty. Falling back to heuristic quiz.');
+      return this.generateHeuristicQuiz(text).slice(0, 10);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`AI | quiz generation failed: ${message}. Raw response: ${rawText || 'empty'}`);
-      return [];
+      this.logger.error(`AI | quiz generation failed: ${message}. Raw response: ${rawText || 'empty'}. Falling back to heuristic quiz.`);
+      return this.generateHeuristicQuiz(text).slice(0, 10);
     }
   }
 
@@ -542,7 +551,7 @@ ${context}`;
         estimatedMinutes: 30,
         difficulty: 'BEGINNER',
         status: 'IN_PROGRESS',
-        quiz: { recommendedQuestionCount: 5, passScore: 70 },
+        quiz: { recommendedQuestionCount: 7, passScore: 30 },
       });
     }
 
@@ -615,12 +624,9 @@ ${context}`;
     const recommendedQuestionCount =
       typeof quizRaw.recommendedQuestionCount === 'number' &&
       quizRaw.recommendedQuestionCount > 0
-        ? Math.floor(quizRaw.recommendedQuestionCount)
-        : 5;
-    const passScore =
-      typeof quizRaw.passScore === 'number' && quizRaw.passScore > 0
-        ? Math.floor(quizRaw.passScore)
-        : 70;
+        ? Math.min(10, Math.max(7, Math.floor(quizRaw.recommendedQuestionCount)))
+        : 7;
+    const passScore = 30;
 
     return {
       moduleId:

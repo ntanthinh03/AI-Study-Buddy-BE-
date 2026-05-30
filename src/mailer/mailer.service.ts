@@ -12,6 +12,15 @@ export class MailerService {
 
   constructor(private readonly configService: ConfigService) {}
 
+  private isDevFallbackEnabled(): boolean {
+    const explicitFallbackEnabled =
+      this.configService.get<string>('MAILER_DEV_FALLBACK')?.toLowerCase() ===
+      'true';
+    const nodeEnv = this.configService.get<string>('NODE_ENV')?.toLowerCase();
+
+    return explicitFallbackEnabled || nodeEnv !== 'production';
+  }
+
   private getBrevoApi(): SibApiV3Sdk.TransactionalEmailsApi {
     const apiKey = this.configService.get<string>('BREVO_API_KEY');
 
@@ -81,9 +90,7 @@ export class MailerService {
     otp: string,
     expiresInMinutes: number,
   ) {
-    const devFallbackEnabled =
-      this.configService.get<string>('MAILER_DEV_FALLBACK')?.toLowerCase() ===
-      'true';
+    const devFallbackEnabled = this.isDevFallbackEnabled();
 
     try {
       const subject = 'AI Study Buddy | Password Reset Verification Code';
@@ -140,9 +147,7 @@ export class MailerService {
     otp: string,
     type: 'email' | 'phone',
   ) {
-    const devFallbackEnabled =
-      this.configService.get<string>('MAILER_DEV_FALLBACK')?.toLowerCase() ===
-      'true';
+    const devFallbackEnabled = this.isDevFallbackEnabled();
 
     try {
       const isEmailUpdate = type === 'email';

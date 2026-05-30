@@ -145,7 +145,15 @@ export class DocumentsController {
         id,
         artifactType,
         artifactData,
-        `Generated ${artifactType.toLowerCase()} from chat request`,
+        artifactType === 'STUDY_PLAN'
+          ? 'Study plan is ready.'
+          : artifactType === 'QUIZ'
+          ? 'Quiz is ready.'
+          : artifactType === 'FLASHCARDS'
+          ? 'Flashcards are ready.'
+          : artifactType === 'MINDMAP'
+          ? 'Mind map is ready.'
+          : `Generated ${artifactType.toLowerCase()} from chat request`,
       );
     }
 

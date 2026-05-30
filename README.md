@@ -63,47 +63,73 @@ server-study-buddy/src/
 
 ## Technical Deployment and Integration Guide
 
-### Step 1: Install Dependencies and Set Up Environment
-1. Clone the repository and execute installation:
+This guide outlines the procedural steps required to deploy the backend application server and initialize a clean database instance from scratch using Docker.
+
+### Prerequisites
+Before proceeding, ensure the following system dependencies are installed on the host machine:
+- **Node.js** (v18.x or later) and **npm** (v9.x or later)
+- **Docker Desktop** or **Docker Engine** with **Docker Compose**
+
+---
+
+### Step 1: Clone and Install Dependencies
+1. Navigate into the server directory and install the necessary dependencies:
    ```bash
    cd server-study-buddy
    npm install
    ```
-2. Create a `.env` configuration file in the backend root based on `.env.example`:
+
+### Step 2: Establish Containerized Database Services (Docker Compose)
+The application utilizes a containerized PostgreSQL instance pre-packaged with the `pgvector` extension to facilitate semantic search operations and embeddings management.
+1. Spin up the database container services in detached mode using Docker Compose:
+   ```bash
+   docker-compose up -d
+   ```
+   *Note: This command downloads the `ankane/pgvector` image and exposes the database service on port `5433` (mapped from the container's native `5432` port) as defined in the [docker-compose.yml](./docker-compose.yml).*
+2. Verify that the database container is operational:
+   ```bash
+   docker ps
+   ```
+   You should observe the container named `buddy-db` in an active, running state.
+
+### Step 3: Configure Environment Parameters
+1. Instantiate an active `.env` configuration file in the server root by duplicating the provided template:
    ```bash
    cp .env.example .env
    ```
-   Ensure key parameters are set:
+2. Open the newly created `.env` file and verify that the database credentials align with the Docker service specifications:
    ```env
    PORT=3001
    DB_HOST=localhost
    DB_PORT=5433
    DB_USERNAME=postgres
-   DB_PASSWORD=your_password
+   DB_PASSWORD=1
    DB_DATABASE=postgres
-   DATABASE_URL=postgresql://postgres:your_password@localhost:5433/postgres
+   DATABASE_URL=postgresql://postgres:1@localhost:5433/postgres
    OLLAMA_BASE_URL=http://localhost:11434
-   BREVO_API_KEY=your_brevo_key
-   BREVO_FROM_EMAIL=your_sender_email
    ```
 
-### Step 2: Initialize Database Extensions
-1. Ensure your PostgreSQL instance is running.
-2. Execute the setup script to register the PGVector extension on your database:
-   ```bash
-   node scripts/enable-pgvector.js
-   ```
+### Step 4: Initialize Vector Database Extensions
+With the PostgreSQL container active, execute the bootstrap script to register the essential vector extensions within the database schema:
+```bash
+node scripts/enable-pgvector.js
+```
+*Note: This script establishes the `vector` extension (`CREATE EXTENSION IF NOT EXISTS vector;`), enabling the database to store high-dimensional embeddings.*
 
-### Step 3: Run the Server
-- **Development**:
+### Step 5: Start the Application Server
+The TypeORM integration is configured to automatically synchronize the entity definitions and construct the database schema on boot for a seamless, fresh setup.
+- **Development Environment (Hot-Reloading)**:
   ```bash
   npm run start:dev
   ```
-- **Production Compilation**:
+- **Production Compilation & Boot**:
   ```bash
   npm run build
   ```
-  The service boots on `http://localhost:3001` by default.
+  ```bash
+  npm run start:prod
+  ```
+The service will bootstrap and begin listening for API requests on `http://localhost:3001` (or your configured `PORT`).
 
 ---
 

@@ -61,6 +61,30 @@ export class ProgressController {
     return await this.progressService.getLessonById(userId, lessonId);
   }
 
+  @Get('timeline')
+  async getProgressTimeline(@Request() req: AuthenticatedRequest) {
+    const userId = req.user.userId;
+    return await this.progressService.getProgressTimeline(userId);
+  }
+
+  @Post('init')
+  async initProgress(
+    @Body() dto: { documentId: string },
+    @Request() req: AuthenticatedRequest,
+  ) {
+    const userId = req.user.userId;
+    return await this.progressService.initProgress(userId, dto.documentId);
+  }
+
+  @Post('complete')
+  async completeProgress(
+    @Body() dto: { documentId: string; score: number },
+    @Request() req: AuthenticatedRequest,
+  ) {
+    const userId = req.user.userId;
+    return await this.progressService.completeProgress(userId, dto.documentId, dto.score);
+  }
+
   @Post('lessons/:lessonId/quiz')
   async saveLessonQuiz(
     @Param('lessonId') lessonId: string,

@@ -114,6 +114,86 @@ export class ProgressService {
     };
   }
 
+  async getProgressTimeline(userId: string) {
+    const lessons = await this.lessonRepository.find({
+      where: { userId },
+    });
+
+    const timelineMap = new Map<string, any>();
+    
+    for (const lesson of lessons) {
+      if (!lesson.documentId) continue;
+      
+      const existing = timelineMap.get(lesson.documentId);
+      const score = (lesson.quizJson as any)?.score ?? (lesson.status === 'COMPLETED' ? 100 : 0);
+      
+      if (!existing || lesson.status === 'COMPLETED') {
+        timelineMap.set(lesson.documentId, {
+          documentId: lesson.documentId,
+          fileName: lesson.title || 'Lesson',
+          status: lesson.status,
+          score: score,
+        });
+      }
+    }
+
+    return Array.from(timelineMap.values());
+  }
+
+  async initProgress(userId: string, documentId: string) {
+    let lesson = await this.lessonRepository.findOne({
+      where: { userId, documentId },
+    });
+
+    if (!lesson) {
+      const document = await this.documentRepository.findOne({
+        where: { id: documentId },
+      });
+      
+      lesson = this.lessonRepository.create({
+        userId,
+        documentId,
+        title: document?.fileName || 'Introduction',
+        contentText: 'Module initialized.',
+        status: 'IN_PROGRESS',
+        lastStudiedAt: new Date(),
+      });
+      await this.lessonRepository.save(lesson);
+    }
+
+    return { message: 'Progress initialized successfully', documentId };
+  }
+
+  async completeProgress(userId: string, documentId: string, score: number) {
+    let lesson = await this.lessonRepository.findOne({
+      where: { userId, documentId },
+    });
+
+    if (!lesson) {
+      const document = await this.documentRepository.findOne({
+        where: { id: documentId },
+      });
+      lesson = this.lessonRepository.create({
+        userId,
+        documentId,
+        title: document?.fileName || 'Introduction',
+        contentText: 'Module completed.',
+        status: 'COMPLETED',
+        completedAt: new Date(),
+        lastStudiedAt: new Date(),
+        quizJson: { score },
+      });
+    } else {
+      lesson.status = 'COMPLETED';
+      lesson.completedAt = new Date();
+      lesson.lastStudiedAt = new Date();
+      lesson.quizJson = { score };
+    }
+
+    await this.lessonRepository.save(lesson);
+    return { message: 'Progress completed successfully', documentId, score };
+  }
+
   private formatLessonResponse(lesson: LearningLesson) {
     return {
       lessonId: lesson.id,
