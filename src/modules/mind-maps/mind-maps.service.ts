@@ -39,14 +39,19 @@ export class MindMapsService {
       const title = await this.aiService.generateSmartTitle(textToUse, 'Mind Map');
 
       
-      const mindMap = this.mindMapRepository.create({
+      const mindMapDataToInsert = {
         userId,
         documentId,
         title,
         content: mindMapData,
-      });
-
-      const saved = await this.mindMapRepository.save(mindMap);
+      };
+      const insertResult = await this.mindMapRepository.insert(mindMapDataToInsert);
+      const saved = {
+        id: insertResult.identifiers[0].id,
+        ...mindMapDataToInsert,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as unknown as MindMap;
 
       await this.analyticsService.logActivity(
         { id: userId } as any,

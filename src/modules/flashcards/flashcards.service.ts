@@ -8,6 +8,7 @@ import { AIService } from '../../common/services/ai.service';
 import { Cron } from '@nestjs/schedule';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { ActivityType } from '../analytics/entities/study-activity.entity';
+import { DocumentsService } from '../../documents/documents.service';
 
 @Injectable()
 export class FlashcardsService {
@@ -20,6 +21,7 @@ export class FlashcardsService {
     private readonly documentRepository: Repository<Document>,
     private readonly aiService: AIService,
     private readonly analyticsService: AnalyticsService,
+    private readonly documentsService: DocumentsService,
   ) {}
 
   async generateFlashcards(documentId: string, user: User): Promise<Flashcard[]> {
@@ -40,19 +42,41 @@ export class FlashcardsService {
 
     const flashcardsData = await this.aiService.generateFlashcards(context);
 
-    const flashcards = flashcardsData
-      .filter((data: any) => data && data.front && data.back)
-      .map((data: any) => {
-        const flashcard = new Flashcard();
-        flashcard.front = data.front;
-        flashcard.back = data.back;
-        flashcard.user = user;
-        flashcard.document = document;
-        flashcard.nextReview = new Date();
-        return flashcard;
-      });
+    const validCards = flashcardsData.filter((data: any) => data && data.front && data.back);
 
-    return await this.flashcardRepository.save(flashcards);
+    const flashcards = validCards.map((data: any) => {
+      const flashcard = new Flashcard();
+      flashcard.front = data.front;
+      flashcard.back = data.back;
+      flashcard.user = user;
+      flashcard.document = document;
+      flashcard.nextReview = new Date();
+      return flashcard;
+    });
+
+    // guard for empty list. insert() crash on empty array in typeorm
+    if (flashcards.length === 0) {
+      return [];
+    }
+    const insertResult = await this.flashcardRepository.insert(flashcards);
+    flashcards.forEach((f, idx) => {
+      f.id = insertResult.identifiers[idx].id;
+    });
+    const saved = flashcards;
+
+    try {
+      await this.documentsService.saveArtifactMessage(
+        user.id,
+        documentId,
+        'FLASHCARDS',
+        validCards,
+        'Generated flashcards',
+      );
+    } catch (err) {
+      this.logger.error(`Failed to save FLASHCARDS artifact message: ${err instanceof Error ? err.message : 'Unknown'}`);
+    }
+
+    return saved;
   }
 
   async generateFlashcardsByTopic(documentId: string, topic: string, user: User): Promise<Flashcard[]> {
@@ -82,19 +106,40 @@ export class FlashcardsService {
       flashcardsData = await this.aiService.generateFlashcards(context);
     }
 
-    const flashcards = flashcardsData
-      .filter((data: any) => data && data.front && data.back)
-      .map((data: any) => {
-        const flashcard = new Flashcard();
-        flashcard.front = data.front;
-        flashcard.back = data.back;
-        flashcard.user = user;
-        flashcard.document = document;
-        flashcard.nextReview = new Date();
-        return flashcard;
-      });
+    const validCards = flashcardsData.filter((data: any) => data && data.front && data.back);
 
-    return await this.flashcardRepository.save(flashcards);
+    const flashcards = validCards.map((data: any) => {
+      const flashcard = new Flashcard();
+      flashcard.front = data.front;
+      flashcard.back = data.back;
+      flashcard.user = user;
+      flashcard.document = document;
+      flashcard.nextReview = new Date();
+      return flashcard;
+    });
+
+    if (flashcards.length === 0) {
+      return [];
+    }
+    const insertResult = await this.flashcardRepository.insert(flashcards);
+    flashcards.forEach((f, idx) => {
+      f.id = insertResult.identifiers[idx].id;
+    });
+    const saved = flashcards;
+
+    try {
+      await this.documentsService.saveArtifactMessage(
+        user.id,
+        documentId,
+        'FLASHCARDS',
+        validCards,
+        `Generated flashcards for topic: ${topic}`,
+      );
+    } catch (err) {
+      this.logger.error(`Failed to save FLASHCARDS artifact message: ${err instanceof Error ? err.message : 'Unknown'}`);
+    }
+
+    return saved;
   }
 
   async getFlashcardsByUser(user: User): Promise<Flashcard[]> {

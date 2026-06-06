@@ -528,18 +528,105 @@ ${context}`;
     fileName: string,
   ): Promise<StudyPlan> {
     const context = text.substring(0, 25000);
-    const prompt = AI_PROMPTS.STUDY_PLAN_USER(context, documentId);
+    this.logger.log(`========== STUDY PLAN GENERATION START ==========`);
+    this.logger.log(`STUDY_PLAN | doc=${documentId} file="${fileName}" contextLen=${context.length}`);
+    this.logger.log(`STUDY_PLAN | context preview: ${context.substring(0, 300)}`);
 
-    const rawText = await this.chat(this.textModel, [
-      {
-        role: 'system',
-        content: AI_PROMPTS.STUDY_PLAN_SYSTEM,
-      },
-      { role: 'user', content: prompt },
-    ], 'json');
+    const maxAttempts = 2;
+    let lastParsed: Record<string, unknown> = {};
 
-    const parsed = this.extractJsonObject(rawText);
-    return this.normalizeStudyPlan(parsed, documentId, fileName);
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const prompt = AI_PROMPTS.STUDY_PLAN_USER(context, documentId, fileName);
+
+      const rawText = await this.chat(this.textModel, [
+        {
+          role: 'system',
+          content: AI_PROMPTS.STUDY_PLAN_SYSTEM,
+        },
+        { role: 'user', content: prompt },
+      ], 'json');
+
+      this.logger.log(`STUDY_PLAN | attempt=${attempt} rawResponse(500): ${rawText.substring(0, 500)}`);
+
+      const parsed = this.extractJsonObject(rawText);
+      lastParsed = parsed;
+
+      // Validate: check if the generated plan title relates to the document content
+      const generatedTitle = typeof parsed.title === 'string' ? parsed.title.toLowerCase() : '';
+      const isHallucinated = this.isStudyPlanHallucinated(generatedTitle, parsed, context, fileName);
+
+      if (!isHallucinated) {
+        this.logger.log(`STUDY_PLAN | attempt=${attempt} VALID title="${parsed.title}"`);
+        const plan = this.normalizeStudyPlan(parsed, documentId, fileName);
+        this.logger.log(`========== STUDY PLAN GENERATION DONE ==========`);
+        return plan;
+      }
+
+      this.logger.warn(`STUDY_PLAN | attempt=${attempt} HALLUCINATION detected! title="${parsed.title}" - retrying...`);
+    }
+
+    // All attempts hallucinated - override title from document fileName
+    this.logger.warn(`STUDY_PLAN | All attempts hallucinated. Overriding title from fileName="${fileName}"`);
+    const cleanFileName = fileName.replace(/\.(pdf|docx?|txt|md)$/i, '').replace(/[_-]/g, ' ');
+    lastParsed.title = `Study Plan: ${cleanFileName}`;
+    lastParsed.overview = `Structured learning roadmap generated from "${fileName}".`;
+
+    const plan = this.normalizeStudyPlan(lastParsed, documentId, fileName);
+    this.logger.log(`========== STUDY PLAN GENERATION DONE (OVERRIDE) ==========`);
+    return plan;
+  }
+
+  private isStudyPlanHallucinated(
+    generatedTitle: string,
+    parsed: Record<string, unknown>,
+    context: string,
+    fileName: string,
+  ): boolean {
+    // Known hallucination patterns - common "default" topics AI models produce
+    const hallucationPatterns = [
+      'data structure', 'arrays', 'linked list', 'binary tree',
+      'sorting algorithm', 'machine learning', 'neural network',
+      'python programming', 'java fundamentals',
+    ];
+
+    const fileNameLower = fileName.toLowerCase().replace(/\.(pdf|docx?|txt|md)$/i, '');
+    const contextLower = context.substring(0, 5000).toLowerCase();
+
+    // Check if generated title contains known hallucination patterns
+    // that do NOT appear in the document content or fileName
+    for (const pattern of hallucationPatterns) {
+      if (generatedTitle.includes(pattern)) {
+        const patternInContent = contextLower.includes(pattern);
+        const patternInFileName = fileNameLower.includes(pattern);
+        if (!patternInContent && !patternInFileName) {
+          this.logger.warn(`STUDY_PLAN | hallucination: "${pattern}" in title but NOT in document`);
+          return true;
+        }
+      }
+    }
+
+    // Check module titles too
+    const modulesRaw = Array.isArray(parsed.modules) ? parsed.modules : [];
+    let hallucModules = 0;
+    for (const mod of modulesRaw) {
+      if (mod && typeof mod === 'object') {
+        const modTitle = typeof (mod as any).title === 'string' ? (mod as any).title.toLowerCase() : '';
+        for (const pattern of hallucationPatterns) {
+          if (modTitle.includes(pattern) && !contextLower.includes(pattern) && !fileNameLower.includes(pattern)) {
+            hallucModules++;
+            break;
+          }
+        }
+      }
+    }
+
+    // If more than half of modules look hallucinated, flag it
+    if (modulesRaw.length > 0 && hallucModules > modulesRaw.length / 2) {
+      this.logger.warn(`STUDY_PLAN | ${hallucModules}/${modulesRaw.length} modules look hallucinated`);
+      return true;
+    }
+
+    return false;
   }
 
   private normalizeStudyPlan(

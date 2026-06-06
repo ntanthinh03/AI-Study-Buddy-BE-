@@ -3,6 +3,7 @@ import {
   UnauthorizedException,
   BadRequestException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -24,6 +25,8 @@ import { MailerService } from '../mailer/mailer.service';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
@@ -172,6 +175,7 @@ export class AuthService {
         otpExpiresInMinutes,
       );
     } catch (error) {
+      this.logger.error(`MAILER | Failed to send verification email to ${normalizedEmail}. Generated OTP: ${otp}`);
       await this.passwordResetOtpRepository.delete({ id: otpRecord.id });
       throw error;
     }
@@ -372,6 +376,7 @@ export class AuthService {
     try {
       await this.mailerService.sendProfileUpdateOtpEmail(sendToEmail, otp, type);
     } catch (error) {
+      this.logger.error(`MAILER | Failed to send profile update verification email to ${sendToEmail}. Generated OTP: ${otp}`);
       await this.profileUpdateOtpRepository.delete({ id: otpRecord.id });
       throw error;
     }

@@ -39,6 +39,15 @@ function isFlashcardRequest(msg: string): boolean {
   );
 }
 
+function isStudyPlanRequest(msg: string): boolean {
+  const lower = msg.toLowerCase();
+  return (
+    lower.includes('study plan') ||
+    lower.includes('roadmap') ||
+    lower.includes('learning path')
+  );
+}
+
 @Controller('documents')
 @UseGuards(AuthGuard('jwt'))
 export class DocumentsController {
@@ -101,7 +110,11 @@ export class DocumentsController {
     
     const combinedText = validDocs.map(d => d!.contentText).join('\n\n').substring(0, 25000);
 
-    if (isQuizRequest(question)) {
+    if (isStudyPlanRequest(question)) {
+      artifactType = 'STUDY_PLAN';
+      artifactData = await this.documentsService.createAndSaveStudyPlan(userId, id);
+      answer = 'Study plan is ready.';
+    } else if (isQuizRequest(question)) {
       artifactType = 'QUIZ';
       artifactData = await this.aiService.generateQuiz(combinedText);
       answer = 'Quiz is created done.';

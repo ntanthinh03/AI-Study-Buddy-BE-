@@ -315,6 +315,20 @@ export class DocumentsService {
     artifactJson: unknown,
     note?: string,
   ) {
+    if (artifactType === 'STUDY_PLAN') {
+      const existing = await this.chatRepository.findOne({
+        where: {
+          document: { id: docId },
+          user: { id: userId },
+          artifactType: 'STUDY_PLAN',
+        },
+      });
+      if (existing) {
+        this.logger.log(`saveArtifactMessage | STUDY_PLAN already exists for docId=${docId}, skipping duplicate save.`);
+        return existing;
+      }
+    }
+
     const conversation = await this.upsertConversation(
       userId,
       docId,
@@ -323,7 +337,19 @@ export class DocumentsService {
       artifactType,
     );
 
-    const savedChat = await this.chatRepository.save({
+    const insertResult = await this.chatRepository.insert({
+      question: note ?? null,
+      answer: null,
+      messageType: 'ARTIFACT',
+      artifactType,
+      artifactJson,
+      user: { id: userId } as any,
+      document: { id: docId } as any,
+      conversation: { id: conversation.id } as any,
+    });
+
+    const savedChat = {
+      id: insertResult.identifiers[0].id,
       question: note ?? null,
       answer: null,
       messageType: 'ARTIFACT',
@@ -332,17 +358,18 @@ export class DocumentsService {
       user: { id: userId },
       document: { id: docId },
       conversation: { id: conversation.id },
-    });
+      createdAt: new Date(),
+    } as unknown as ChatMessage;
 
     if (artifactType === 'QUIZ' && Array.isArray(artifactJson)) {
       try {
-        await this.quizRepository.save({
+        await this.quizRepository.insert({
           quizName: note || 'Chat Generated Quiz',
           quizTitle: 'Quiz',
           questions: artifactJson as any[],
-          document: { id: docId },
-          user: { id: userId },
-          conversation: { id: conversation.id },
+          document: { id: docId } as any,
+          user: { id: userId } as any,
+          conversation: { id: conversation.id } as any,
         });
       } catch (e) {
         this.logger.error(`Failed to save quiz to DB: ${e instanceof Error ? e.message : 'Unknown'}`);
@@ -358,7 +385,9 @@ export class DocumentsService {
           f.nextReview = new Date();
           return f;
         });
-        await this.flashcardRepository.save(flashcards);
+        if (flashcards.length > 0) {
+          await this.flashcardRepository.insert(flashcards);
+        }
       } catch (e) {
         this.logger.error(`Failed to save flashcards to DB: ${e instanceof Error ? e.message : 'Unknown'}`);
       }
@@ -529,9 +558,10 @@ export class DocumentsService {
       throw new NotFoundException(DOCUMENT_MESSAGES.CONVERSATION_NOT_FOUND);
     }
 
-    conversation.title = title.replace(/^["']|["']$/g, '').trim();
-    const saved = await this.conversationRepository.save(conversation);
-    return this.formatConversationResponse(saved);
+    const cleanTitle = title.replace(/^["']|["']$/g, '').trim();
+    await this.conversationRepository.update(conversation.id, { title: cleanTitle });
+    conversation.title = cleanTitle;
+    return this.formatConversationResponse(conversation);
   }
 
   private async upsertConversation(
@@ -569,34 +599,54 @@ export class DocumentsService {
         lastArtifactType: artifactType ?? null,
         lastMessageAt: new Date(),
       });
+      conversation = await this.conversationRepository.save(conversation);
     } else {
+      // use query builder update insted of save because save checks all relations and throws errors
+      const updatePayload: any = {};
       if (this.isDefaultTitle(conversation.title, document.fileName)) {
         conversation.title = title;
+        updatePayload.title = title;
       }
       if (!conversation.documentId) {
         conversation.documentId = docId;
+        updatePayload.documentId = docId;
       }
-      conversation.kind =
+      const newKind =
         kind === 'CHAT' && conversation.kind !== 'CHAT'
           ? conversation.kind
           : kind;
-      conversation.lastMessagePreview =
-        preview ?? conversation.lastMessagePreview;
-      conversation.lastArtifactType =
-        artifactType ?? conversation.lastArtifactType;
-      conversation.lastMessageAt = new Date();
+      if (conversation.kind !== newKind) {
+        conversation.kind = newKind;
+        updatePayload.kind = newKind;
+      }
+      if (preview !== undefined) {
+        conversation.lastMessagePreview = preview;
+        updatePayload.lastMessagePreview = preview;
+      }
+      if (artifactType !== undefined) {
+        conversation.lastArtifactType = artifactType;
+        updatePayload.lastArtifactType = artifactType;
+      }
+      const now = new Date();
+      conversation.lastMessageAt = now;
+      updatePayload.lastMessageAt = now;
+
+      await this.conversationRepository
+        .createQueryBuilder()
+        .update(Conversation)
+        .set(updatePayload)
+        .where('id = :id', { id: conversation.id })
+        .execute();
     }
 
-    const savedConversation = await this.conversationRepository.save(conversation);
-
-    if (this.isDefaultTitle(savedConversation.title, document.fileName)) {
+    if (this.isDefaultTitle(conversation.title, document.fileName)) {
       const textToUse = document.summary || document.contentText || '';
       if (textToUse.trim().length > 0) {
-        this.triggerBackgroundSmartTitle(savedConversation.id, textToUse, 'Document Summary');
+        this.triggerBackgroundSmartTitle(conversation.id, textToUse, 'Document Summary');
       }
     }
 
-    return savedConversation;
+    return conversation;
   }
 
   private async upsertGeneralConversation(
@@ -640,14 +690,17 @@ export class DocumentsService {
       return savedConversation;
     }
 
+    const now = new Date();
+    await this.conversationRepository.update(conversation.id, {
+      lastMessagePreview: preview,
+      lastMessageAt: now,
+    });
     conversation.lastMessagePreview = preview;
-    conversation.lastMessageAt = new Date();
-    
-    const savedConversation = await this.conversationRepository.save(conversation);
-    if (this.isDefaultTitle(savedConversation.title)) {
-      this.triggerBackgroundSmartTitle(savedConversation.id, preview, 'Chat');
+    conversation.lastMessageAt = now;
+    if (this.isDefaultTitle(conversation.title)) {
+      this.triggerBackgroundSmartTitle(conversation.id, preview, 'Chat');
     }
-    return savedConversation;
+    return conversation;
   }
 
   async createAndSaveStudyPlan(userId: string, docId: string) {
@@ -659,11 +712,31 @@ export class DocumentsService {
       );
     }
 
+    const existingMessage = await this.chatRepository.findOne({
+      where: {
+        document: { id: docId },
+        user: { id: userId },
+        artifactType: 'STUDY_PLAN',
+      },
+      order: { createdAt: 'DESC' },
+    });
+
+    if (existingMessage && existingMessage.artifactJson) {
+      this.logger.log(`STUDY_PLAN_DEBUG | Found existing study plan for docId=${docId}, returning cached plan.`);
+      return existingMessage.artifactJson;
+    }
+
+    this.logger.log(`STUDY_PLAN_DEBUG | docId=${docId} fileName="${doc.fileName}" contentText.length=${doc.contentText.length}`);
+    this.logger.log(`STUDY_PLAN_DEBUG | first 500 chars of contentText: ${doc.contentText.substring(0, 500)}`);
+
     const plan = await this.aiService.generateStudyPlan(
       doc.contentText,
       docId,
       doc.fileName,
     );
+
+    this.logger.log(`STUDY_PLAN_DEBUG | generated plan title="${plan.title}" modules=${plan.modules.length}`);
+    this.logger.log(`STUDY_PLAN_DEBUG | plan overview: ${plan.overview}`);
 
     await this.saveArtifactMessage(
       userId,
@@ -685,10 +758,20 @@ export class DocumentsService {
       relations: ['document'],
       order: { createdAt: 'ASC' },
     });
-    return messages.map(msg => ({
-      ...msg,
-      attachmentName: null,
-    }));
+
+    let firstUserMsgFound = false;
+
+    return messages.map(msg => {
+      let attachmentName: string | null = null;
+      if (msg.messageType === 'QA' && msg.question && !firstUserMsgFound) {
+        firstUserMsgFound = true;
+        attachmentName = msg.document?.fileName || null;
+      }
+      return {
+        ...msg,
+        attachmentName,
+      };
+    });
   }
 
   async findAllByUser(userId: string) {
@@ -755,5 +838,24 @@ export class DocumentsService {
       attachmentName: null,
       createdAt: message.createdAt,
     };
+  }
+
+  async hasConversationImages(conversationId: string): Promise<boolean> {
+    const count = await this.chatRepository
+      .createQueryBuilder('msg')
+      .where('msg.conversation_id = :conversationId', { conversationId })
+      .andWhere('msg.image_data IS NOT NULL')
+      .getCount();
+    return count > 0;
+  }
+
+  async getConversationMessagesRaw(conversationId: string, userId: string): Promise<ChatMessage[]> {
+    return await this.chatRepository.find({
+      where: {
+        conversation: { id: conversationId },
+        user: { id: userId },
+      },
+      order: { createdAt: 'ASC' },
+    });
   }
 }

@@ -40,6 +40,7 @@ export class StudySessionsService {
     let session = await this.sessionRepository.findOne({
       where: {
         user: { id: userId },
+        type: 'DAILY',
         createdAt: MoreThanOrEqual(today),
       },
       order: { createdAt: 'DESC' },
@@ -72,6 +73,7 @@ export class StudySessionsService {
 
     session = this.sessionRepository.create({
       user: { id: userId },
+      type: 'DAILY',
       content: {
         quizQuestions: poolQuizzes.map(p => ({ ...p.data, poolId: p.id })),
         flashcards: [], // Omit flashcards for the 20-question daily quiz challenge
@@ -136,6 +138,7 @@ export class StudySessionsService {
 
     const session = this.sessionRepository.create({
       user: { id: userId },
+      type: 'MOCK_EXAM',
       content: {
         quizQuestions: questionsData,
         flashcards: [],

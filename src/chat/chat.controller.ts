@@ -69,7 +69,13 @@ export class ChatController {
       ? await this.documentsService.getAllConversationDocumentIds(body.conversationId, userId)
       : [];
 
-    if (docIds.length === 0) {
+    // check if we got doc or at least some image upload in this chat conv
+    // if not, tell them to upload. otherwise we got nothing to study on
+    const hasImages = body.conversationId
+      ? await this.documentsService.hasConversationImages(body.conversationId)
+      : false;
+
+    if (docIds.length === 0 && !hasImages) {
       const promptToUpload = 'Hello! To start studying, please attach or upload at least one relevant PDF/image document to this conversation. I will read all the uploaded materials to answer your questions, help you generate multiple-choice quizzes, study flashcards, or create a study plan tailored strictly to the document content!';
       return await this.documentsService.saveGeneralMessage(
         userId,
@@ -80,12 +86,15 @@ export class ChatController {
       );
     }
 
-    const docs = await Promise.all(docIds.map(docId => 
-      this.documentsService.findOne(docId, userId).catch(() => null)
-    ));
-    const validDocs = docs.filter(d => d !== null && d.contentText && d.contentText.trim().length > 0);
+    let validDocs = [];
+    if (docIds.length > 0) {
+      const docs = await Promise.all(docIds.map(docId => 
+        this.documentsService.findOne(docId, userId).catch(() => null)
+      ));
+      validDocs = docs.filter(d => d !== null && d.contentText && d.contentText.trim().length > 0);
+    }
 
-    if (validDocs.length === 0) {
+    if (validDocs.length === 0 && !hasImages) {
       throw new BadRequestException('Learning materials are being processed, please wait a moment.');
     }
 
@@ -95,7 +104,16 @@ export class ChatController {
     let artifactType: 'QUIZ' | 'STUDY_PLAN' | 'FLASHCARDS' | 'MINDMAP' | null = null;
     let artifactData: any = null;
     
-    const combinedText = validDocs.map(d => d!.contentText).join('\n\n').substring(0, 25000);
+    let combinedText = '';
+    if (validDocs.length > 0) {
+      combinedText = validDocs.map(d => d!.contentText).join('\n\n').substring(0, 25000);
+    } else if (hasImages) {
+      const history = await this.documentsService.getConversationMessagesRaw(body.conversationId!, userId);
+      combinedText = history
+        .map(m => `User question: ${m.question}\nAI explanation of uploaded image: ${m.answer}`)
+        .join('\n\n')
+        .substring(0, 25000);
+    }
 
     if (isQuizRequest(body.message)) {
       artifactType = 'QUIZ';
@@ -106,8 +124,19 @@ export class ChatController {
       artifactData = await this.aiService.generateFlashcards(combinedText);
       answer = 'Flashcard is created done.';
     } else {
-      const { answer: rawAnswer } = await this.ragService.answerQuestion(body.message, userId, docIds, preComputedSummaries);
-      answer = rawAnswer;
+      if (docIds.length > 0) {
+        const { answer: rawAnswer } = await this.ragService.answerQuestion(body.message, userId, docIds, preComputedSummaries);
+        answer = rawAnswer;
+      } else {
+        const rawAnswer = await this.aiService.chat(this.aiService.textModel, [
+          {
+            role: 'system',
+            content: `You are a helpful study buddy. Answer the student's question based on the following context derived from images uploaded in this conversation:\n\n${combinedText}`,
+          },
+          { role: 'user', content: body.message },
+        ]);
+        answer = rawAnswer;
+      }
 
       if (answer.includes('[GENERATE_QUIZ]')) {
         artifactType = 'QUIZ';

@@ -49,6 +49,7 @@ export class ProgressController {
       userId,
       lessonId,
       dto.status,
+      dto.score,
     );
   }
 

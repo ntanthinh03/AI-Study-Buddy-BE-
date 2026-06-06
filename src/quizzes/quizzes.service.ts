@@ -126,7 +126,7 @@ export class QuizzesService {
     const finalQuestions = updatedQuestions.slice(0, 20);
 
     quiz.questions = finalQuestions;
-    await this.quizzesRepository.save(quiz);
+    await this.quizzesRepository.update(quiz.id, { questions: finalQuestions });
 
     return {
       quizId,
@@ -182,15 +182,20 @@ export class QuizzesService {
     quizName: string,
     quizTitle: string,
   ) {
-    const quiz = this.quizzesRepository.create({
+    const quizData = {
       quizName,
       quizTitle,
       questions,
-      document: { id: documentId },
-      user: { id: userId },
-      conversation: { id: conversationId },
-    });
-    return await this.quizzesRepository.save(quiz);
+      document: { id: documentId } as any,
+      user: { id: userId } as any,
+      conversation: { id: conversationId } as any,
+    };
+    const insertResult = await this.quizzesRepository.insert(quizData);
+    return {
+      id: insertResult.identifiers[0].id,
+      ...quizData,
+      createdAt: new Date(),
+    } as unknown as Quiz;
   }
   async findAllByUser(userId: string) {
     const quizzes = await this.quizzesRepository.find({

@@ -90,32 +90,38 @@ Generated quiz:
 ${questionsJson}`,
 
   STUDY_PLAN_SYSTEM:
-    'You are an expert academic counselor. You create structured, progressive study plans from academic documents. Always respond in English.',
-  STUDY_PLAN_USER: (context: string, documentId: string) => `Create a study plan based ONLY on the provided source content. 
-Do not include outside knowledge. Output strictly in valid JSON only.
+    'You are an expert academic counselor. You create structured, progressive study plans STRICTLY from the content provided by the user. You MUST NOT invent topics, modules, or subjects that do not appear in the source content. The plan title and every module title must directly reflect the actual topics found in the source text. Always respond in English.',
+  STUDY_PLAN_USER: (context: string, documentId: string, fileName: string) => `You are given the following source document titled "${fileName}". Read the content carefully FIRST, then create a study plan that ONLY covers topics found in this document.
 
-STRICT RULES:
-- Return ONLY a valid JSON object.
-- No markdown, no code fences, no extra text.
-- Divide the content into 3-5 logical modules (lessons) based strictly on the content hierarchy.
+=== SOURCE CONTENT START ===
+${context}
+=== SOURCE CONTENT END ===
+
+Now create a study plan based STRICTLY on the source content above.
+
+CRITICAL RULES:
+- The plan title MUST reflect the actual subject of the source document above. Do NOT invent a different subject.
+- Every module title and objective MUST come directly from topics/sections found in the source content.
+- Do NOT add any topics that are not discussed in the source content (e.g., do not add "Data Structures", "Arrays", "Linked Lists" unless those topics actually appear in the source text).
+- Return ONLY a valid JSON object. No markdown, no code fences, no extra text.
+- Divide the content into 3-5 logical modules (lessons) based on the document's actual sections/hierarchy.
 - Each module must have a title, objective, documentId, order, difficulty, and estimatedMinutes.
-- Use documentId exactly as provided.
+- Use documentId exactly as provided: "${documentId}".
 - First module should be IN_PROGRESS, remaining modules should be LOCKED.
-- If information is missing, use "Review more material" as placeholders for empty gaps.
 
-Required format:
+Required JSON format:
 {
-  "planId": "...",
-  "title": "...",
-  "overview": "...",
+  "planId": "plan_${documentId}",
+  "title": "<must reflect the actual document subject>",
+  "overview": "<summary of what the document covers>",
   "estimatedTotalMinutes": 0,
   "modules": [
     {
-      "moduleId": "...",
+      "moduleId": "${documentId}-m1",
       "order": 1,
       "documentId": "${documentId}",
-      "title": "...",
-      "objective": "...",
+      "title": "<must be a real topic from the source>",
+      "objective": "<learning goal based on source content>",
       "estimatedMinutes": 0,
       "difficulty": "BEGINNER",
       "status": "IN_PROGRESS",
@@ -127,8 +133,7 @@ Required format:
   ]
 }
 
-Source content:
-${context}`,
+REMINDER: The plan title and all module titles MUST come from the source document content above. Do NOT generate generic or unrelated topics.`,
 
   OCR_SYSTEM:
     'You are an OCR assistant. Extract text from images accurately and return plain text only in English.',

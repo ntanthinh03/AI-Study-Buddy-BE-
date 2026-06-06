@@ -24,6 +24,9 @@ export class StudySession {
   @Column({ type: 'enum', enum: SessionStatus, default: SessionStatus.IN_PROGRESS })
   status!: SessionStatus;
 
+  @Column({ type: 'text', default: 'DAILY' })
+  type!: 'DAILY' | 'MOCK_EXAM';
+
   @Column({ type: 'jsonb' })
   content!: {
     quizQuestions: any[];

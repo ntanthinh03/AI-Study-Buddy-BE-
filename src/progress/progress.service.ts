@@ -92,6 +92,7 @@ export class ProgressService {
     userId: string,
     lessonId: string,
     status: 'IN_PROGRESS' | 'COMPLETED',
+    score?: number,
   ) {
     const lesson = await this.lessonRepository.findOne({
       where: { id: lessonId, userId },
@@ -104,6 +105,10 @@ export class ProgressService {
     lesson.status = status;
     lesson.completedAt = status === 'COMPLETED' ? new Date() : null;
     lesson.lastStudiedAt = new Date();
+    if (score !== undefined) {
+      const existingScore = (lesson.quizJson as any)?.score ?? 0;
+      lesson.quizJson = { score: Math.max(existingScore, score) };
+    }
     await this.lessonRepository.save(lesson);
 
     return {
@@ -187,7 +192,8 @@ export class ProgressService {
       lesson.status = 'COMPLETED';
       lesson.completedAt = new Date();
       lesson.lastStudiedAt = new Date();
-      lesson.quizJson = { score };
+      const existingScore = (lesson.quizJson as any)?.score ?? 0;
+      lesson.quizJson = { score: Math.max(existingScore, score) };
     }
 
     await this.lessonRepository.save(lesson);
