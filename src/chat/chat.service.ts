@@ -95,8 +95,14 @@ export class ChatService {
       return this.visionModel;
     }
 
-    if (candidates.includes(this.visionModel)) {
-      return this.visionModel;
+    const exactMatch = candidates.find(
+      (name) =>
+        name === this.visionModel ||
+        name === `${this.visionModel}:latest` ||
+        name.split(':')[0] === this.visionModel,
+    );
+    if (exactMatch) {
+      return exactMatch;
     }
 
     const fallback = candidates.find((name) =>

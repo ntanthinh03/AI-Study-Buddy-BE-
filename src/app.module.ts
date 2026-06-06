@@ -16,6 +16,7 @@ import { StudyRoomsModule } from './modules/study-rooms/study-rooms.module';
 import { MindMapsModule } from './modules/mind-maps/mind-maps.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { VersusArenaModule } from './modules/versus-arena/versus-arena.module';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -56,7 +57,7 @@ import { VersusArenaModule } from './modules/versus-arena/versus-arena.module';
     ScheduleModule.forRoot(),
     VersusArenaModule,
   ],
-  controllers: [],
+  controllers: [AppController],
   providers: [],
 })
 export class AppModule {}

@@ -687,7 +687,7 @@ export class DocumentsService {
     });
     return messages.map(msg => ({
       ...msg,
-      attachmentName: msg.document?.fileName ?? null,
+      attachmentName: null,
     }));
   }
 
@@ -752,7 +752,7 @@ export class DocumentsService {
       artifactJson: message.artifactJson,
       imageMimeType: message.imageMimeType ?? null,
       imageOriginalName: message.imageOriginalName ?? null,
-      attachmentName: message.document?.fileName ?? null,
+      attachmentName: null,
       createdAt: message.createdAt,
     };
   }

@@ -81,8 +81,12 @@ export class AIService {
 
       const prompt = `
         <|system|>
-        You are an elite AI Study Buddy. Your task is to provide accurate, helpful, and concise answers based strictly on the provided context.
-        If the context does not contain the answer, politely inform the student.
+        You are strictly a PDF-grounded academic tutor. 
+        CRITICAL RULES:
+        1. Answer the user's question based ONLY on the provided Context below.
+        2. DO NOT use any outside knowledge, pre-trained facts, or general statistics not explicitly mentioned in the Context.
+        3. If the Context does not contain the exact answer, or if the information is missing, you must explicitly reply: "I cannot find this information in the provided document." Do not try to make up, estimate, or assume anything.
+        4. Keep your answer concise, factual, and in English.
         <|end|>
         <|user|>
         Context: ${context}
@@ -363,6 +367,28 @@ ${context}`;
       return this.generateHeuristicFlashcards(text);
     }
   }
+
+  async generateFlashcardsByTopic(text: string, topic: string): Promise<any[]> {
+    const context = text.substring(0, 25000);
+
+    try {
+      const rawText = await this.chat(this.textModel, [
+        {
+          role: 'system',
+          content: AI_PROMPTS.FLASHCARD_SYSTEM,
+        },
+        { role: 'user', content: AI_PROMPTS.FLASHCARD_TOPIC_USER(context, topic) },
+      ], 'json');
+
+      this.logger.debug(`AI | Topic flashcard raw response: ${rawText.substring(0, 300)}`);
+      return this.extractJsonArray(rawText) as any[];
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`AI | topic flashcards generation failed (topic="${topic}"), using fallback: ${message}`);
+      return this.generateHeuristicFlashcards(text);
+    }
+  }
+
 
   async generateBatchQuestions(
     text: string,

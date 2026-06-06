@@ -32,10 +32,10 @@ export class AnalyticsService {
       user,
       userId: user.id,
       type,
-      score: data.score || 0,
-      totalQuestions: data.totalQuestions || 0,
-      correctAnswers: data.correctAnswers || 0,
-      durationSeconds: data.durationSeconds || 0,
+      score: Math.round(data.score || 0),
+      totalQuestions: Math.round(data.totalQuestions || 0),
+      correctAnswers: Math.round(data.correctAnswers || 0),
+      durationSeconds: Math.round(data.durationSeconds || 0),
       metadata: data.metadata ? JSON.stringify(data.metadata) : undefined,
     });
 

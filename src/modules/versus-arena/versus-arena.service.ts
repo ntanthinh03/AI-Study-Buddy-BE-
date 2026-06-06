@@ -34,6 +34,17 @@ export class VersusArenaService {
 
         stats.versusLockoutUntil = null;
         stats.versusWarningsCount = 0;
+        stats.versusLastWarningAt = null;
+        await this.statsRepository.save(stats);
+      }
+    }
+
+    // Auto-expire warnings older than 2 hours
+    if (stats && stats.versusLastWarningAt && !stats.versusLockoutUntil) {
+      const twoHoursMs = 2 * 60 * 60 * 1000;
+      if (Date.now() - new Date(stats.versusLastWarningAt).getTime() > twoHoursMs) {
+        stats.versusWarningsCount = 0;
+        stats.versusLastWarningAt = null;
         await this.statsRepository.save(stats);
       }
     }
@@ -304,7 +315,17 @@ export class VersusArenaService {
       stats = this.statsRepository.create({ user: { id: userId } });
     }
 
+    // Auto-expire warnings older than 2 hours before incrementing
+    if (stats.versusLastWarningAt && !stats.versusLockoutUntil) {
+      const twoHoursMs = 2 * 60 * 60 * 1000;
+      if (Date.now() - new Date(stats.versusLastWarningAt).getTime() > twoHoursMs) {
+        stats.versusWarningsCount = 0;
+        stats.versusLastWarningAt = null;
+      }
+    }
+
     stats.versusWarningsCount += 1;
+    stats.versusLastWarningAt = new Date();
     let locked = false;
     let lockoutUntil: Date | null = null;
 
@@ -312,6 +333,7 @@ export class VersusArenaService {
       lockoutUntil = new Date(Date.now() + 6 * 60 * 60 * 1000);
       stats.versusLockoutUntil = lockoutUntil;
       stats.versusWarningsCount = 0;
+      stats.versusLastWarningAt = null;
       locked = true;
     }
 
@@ -345,6 +367,17 @@ export class VersusArenaService {
 
         stats.versusLockoutUntil = null;
         stats.versusWarningsCount = 0;
+        stats.versusLastWarningAt = null;
+        await this.statsRepository.save(stats);
+      }
+    }
+
+    // Auto-expire warnings older than 2 hours
+    if (stats.versusLastWarningAt) {
+      const twoHoursMs = 2 * 60 * 60 * 1000;
+      if (Date.now() - new Date(stats.versusLastWarningAt).getTime() > twoHoursMs) {
+        stats.versusWarningsCount = 0;
+        stats.versusLastWarningAt = null;
         await this.statsRepository.save(stats);
       }
     }

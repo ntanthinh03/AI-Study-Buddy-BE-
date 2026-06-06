@@ -74,6 +74,14 @@ export class UserStats {
   versusLockoutUntil!: Date | null;
 
   @Column({
+    name: 'versus_last_warning_at',
+    type: 'timestamp',
+    nullable: true,
+    default: null,
+  })
+  versusLastWarningAt!: Date | null;
+
+  @Column({
     name: 'elo',
     type: 'int',
     default: 1200,

@@ -132,11 +132,14 @@ export class ChatController {
       .replace('[GENERATE_MINDMAP]', '')
       .replace('[GENERATE_STUDY_PLAN]', '')
       .trim();
+    const displayAnswer = artifactType === 'STUDY_PLAN'
+      ? 'Study plan is ready.'
+      : cleanAnswer;
 
     const savedMessage = await this.documentsService.saveGeneralMessage(
       userId,
       body.message,
-      cleanAnswer,
+      displayAnswer,
       body.conversationId,
       body.title,
     );
@@ -163,7 +166,7 @@ export class ChatController {
       conversationId: savedMessage.conversationId,
       messageId: savedMessage.messageId,
       question: savedMessage.question,
-      answer: cleanAnswer,
+      answer: displayAnswer,
       createdAt: savedMessage.createdAt,
       artifactType,
       artifactData,

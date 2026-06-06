@@ -136,6 +136,9 @@ export class DocumentsController {
       .replace('[GENERATE_MINDMAP]', '')
       .replace('[GENERATE_STUDY_PLAN]', '')
       .trim();
+    const displayAnswer = artifactType === 'STUDY_PLAN'
+      ? 'Study plan is ready.'
+      : cleanAnswer;
 
     const savedMessage = await this.documentsService.saveMessage(userId, id, question, cleanAnswer, conversationId);
 
@@ -160,7 +163,7 @@ export class DocumentsController {
     return {
       conversationId: savedMessage.conversation?.id,
       messageId: savedMessage.id,
-      answer: cleanAnswer,
+      answer: displayAnswer,
       artifactType,
       artifactData,
     };
