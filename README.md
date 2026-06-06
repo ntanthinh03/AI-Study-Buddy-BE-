@@ -73,10 +73,10 @@ Before proceeding, ensure the following system dependencies are installed on the
 ---
 
 ### Step 1: Clone and Install Dependencies
-1. Navigate into the server directory and install the necessary dependencies:
+1. Navigate into the server directory and install the necessary dependencies (use `--legacy-peer-deps` to resolve peer dependency conflicts):
    ```bash
    cd server-study-buddy
-   npm install
+   npm install --legacy-peer-deps
    ```
 
 ### Step 2: Establish Containerized Database Services (Docker Compose)
